@@ -1,0 +1,44 @@
+---
+config:
+  layout: dagre
+  theme: neutral
+---
+flowchart LR
+ subgraph subGraph0["Pipeline 1: Data Ingestion &amp; Analysis (Automating the Manual Review)"]
+        B1["Unstructured Data<br>Pitch Deck PDF, Emails"]
+        A1["Investor"]
+        C1["Cloud Storage"]
+        D1{"Cloud Function"}
+        E1["Cloud Vision AI"]
+        F1["Vertex AI: Gemini"]
+        G1["Structured &amp; Enriched<br>JSON Memo"]
+        H1["Firebase Firestore"]
+        I1["Collaborative Dashboard<br>Kanban, Memos"]
+        J1["BigQuery Data Warehouse"]
+  end
+ subgraph subGraph1["Pipeline 2: Conversational Query (Getting Instant Insights)"]
+        K1["Web App Chat UI"]
+        A2["Investor"]
+        L1["Agent Builder"]
+        n1["Untitled Node"]
+  end
+    A1 -- Forwards Email or Uploads File --> B1
+    B1 --> C1
+    C1 -- Triggers --> D1
+    D1 -- "1. OCR" --> E1
+    E1 -- Raw Text --> F1
+    F1 -- "2. Structure<br>3. Analyze Risks<br>4. Summarize" --> G1
+    G1 -- "For Real-time App" --> H1
+    H1 --> I1
+    G1 -- For Analytics & Search --> J1
+    I1 -- Is Viewed By --> A1
+    A2 -- Asks Question in Plain English --> K1
+    K1 -- Natural Language Query --> L1
+    L1 -- Translates question to SQL<br>and queries the data --> J1
+    J1 -- Structured Data Results --> L1
+    L1 -- Formats data into<br>Natural Language Answer --> K1
+    K1 -- Displays Instant Answer --> A2
+    L1 --> n1
+    style A1 fill:#d4edda,stroke:#155724
+    style I1 fill:#cce5ff,stroke:#004085
+    style A2 fill:#d4edda,stroke:#155724

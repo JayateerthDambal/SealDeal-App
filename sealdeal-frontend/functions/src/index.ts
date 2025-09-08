@@ -1,30 +1,26 @@
-import {onCall, HttpsError} from "firebase-functions/v2/https";
-import {onObjectFinalized} from "firebase-functions/v2/storage";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onObjectFinalized } from "firebase-functions/v2/storage";
 import * as admin from "firebase-admin";
-const {FieldValue} = require("firebase-admin/firestore");
-import {logger} from "firebase-functions";
+import { FieldValue } from "firebase-admin/firestore";
+import { logger } from "firebase-functions";
 
 
-// --- DEPENDENCY UPGRADE ---
-import {parse} from "csv-parse/sync";
-// The vulnerable 'xlsx' package is replaced with the more secure 'exceljs'.
+import { parse } from "csv-parse/sync";
 import * as Excel from "exceljs";
 
 
-// Initialize the Firebase Admin SDK.
 admin.initializeApp();
-let db = admin.firestore();
+const db = admin.firestore();
 
 
-// --- AI Configuration ---
-const PROJECT_ID = "sunlit-setup-470516-q3";
+// TODO: Use ENV later.
+const PROJECT_ID = "genai-hackathon-aicommanders";
 const LOCATION = "asia-south1";
 
 
-// Manually connect to the Firestore emulator if it's running.
 if (process.env.FUNCTIONS_EMULATOR === "true") {
-  logger.info("Emulator detected! Connecting to local Firestore instance.");
-  db.settings({ host: "localhost:8080", ssl: false });
+    logger.info("Emulator detected! Connecting to local Firestore instance.");
+    db.settings({ host: "localhost:8080", ssl: false });
 }
 
 
@@ -39,7 +35,7 @@ export const createDeal = onCall({ region: LOCATION }, async (request) => {
             createdAt: FieldValue.serverTimestamp(),
         };
         const dealRef = await db.collection("deals").add(dealData);
-        return {dealId: dealRef.id, message: "Deal created successfully."};
+        return { dealId: dealRef.id, message: "Deal created successfully." };
     } catch (error) {
         console.error("Error creating deal:", error);
         throw new HttpsError("internal", "Firestore write failed.");
@@ -100,7 +96,7 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
         const documentPromises = documentsSnapshot.docs.map(async (doc) => {
             const { storagePath, fileName } = doc.data();
             const [fileBuffer] = await admin.storage().bucket().file(storagePath).download();
-           
+
             // --- EXPANDED FILE TYPE HANDLING ---
             if (fileName.endsWith('.pdf')) {
                 return { type: 'presentation', data: fileBuffer.toString('base64'), fileName, mimeType: 'application/pdf' };
@@ -113,7 +109,7 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
                 } else if (fileName.endsWith('.xlsx')) {
                     const workbook = new Excel.Workbook();
                     // DEFINITIVE FIX: Use a type assertion to resolve the incompatibility.
-                    await workbook.xlsx.load(fileBuffer as any);
+                    await workbook.xlsx.load(fileBuffer as Buffer);
                     const worksheet = workbook.worksheets[0];
                     const csvData: string[] = [];
                     worksheet.eachRow((row) => {
@@ -136,8 +132,8 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
         // Step 2: Prepare the content for Gemini
         const presentationParts = processedDocuments
             .filter(d => d.type === 'presentation')
-            .map(d => ({ inline_data: { mime_type: d.mimeType, data: d.data }}));
-           
+            .map(d => ({ inline_data: { mime_type: d.mimeType, data: d.data } }));
+
         const textContent = processedDocuments
             .filter(d => d.type === 'text')
             .map(d => `--- [START OF DOCUMENT: ${d.fileName}] ---\n${d.data}\n--- [END OF DOCUMENT: ${d.fileName}] ---`)
@@ -225,18 +221,18 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
               }
             }
         `;
-       
+
         const allParts = [{ text: prompt }, ...presentationParts];
         if (textContent.trim().length > 0) {
             allParts.push({ text: textContent });
         }
-       
-        const requestBody = { contents: [{ role: "user", parts: allParts }] };
 
+        const requestBody = { contents: [{ role: "user", parts: allParts }] };
+        console.log(PROJECT_ID);
 
         const model = "gemini-1.5-flash-002";
         const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${model}:generateContent`;
-
+        console.log(url)
 
         const credential = admin.credential.applicationDefault();
         const accessToken = await credential.getAccessToken();
@@ -249,7 +245,7 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
 
         if (!response.ok) { throw new Error(`API call failed: ${await response.text()}`); }
         const responseData = await response.json();
-        let jsonResponse = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+        const jsonResponse = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!jsonResponse) { throw new Error("Gemini returned an invalid response."); }
 
 
@@ -259,10 +255,44 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
         const extractedData = JSON.parse(jsonString);
 
 
-        await db.collection("deals").doc(dealId).collection("analysis").add({
+        // Ensure BigQuery-compatible data structure
+        const analysisDocument = {
             ...extractedData,
             sourceFiles: documentsSnapshot.docs.map(d => d.data().fileName),
             analyzedAt: FieldValue.serverTimestamp(),
+            dealId: dealId, // Add dealId for BigQuery joins
+            createdBy: request.auth.uid,
+            version: "1.0",
+            // Flatten nested objects for BigQuery compatibility
+            metrics_arr_value: extractedData.metrics?.arr?.value || null,
+            metrics_arr_source: extractedData.metrics?.arr?.source_quote || null,
+            metrics_mrr_value: extractedData.metrics?.mrr?.value || null,
+            metrics_mrr_source: extractedData.metrics?.mrr?.source_quote || null,
+            metrics_cac_value: extractedData.metrics?.cac?.value || null,
+            metrics_cac_source: extractedData.metrics?.cac?.source_quote || null,
+            metrics_ltv_value: extractedData.metrics?.ltv?.value || null,
+            metrics_ltv_source: extractedData.metrics?.ltv?.source_quote || null,
+            metrics_ltv_cac_ratio_value: extractedData.metrics?.ltv_cac_ratio?.value || null,
+            metrics_ltv_cac_ratio_source: extractedData.metrics?.ltv_cac_ratio?.source_quote || null,
+            metrics_gross_margin_value: extractedData.metrics?.gross_margin?.value || null,
+            metrics_gross_margin_source: extractedData.metrics?.gross_margin?.source_quote || null,
+            investment_recommendation: extractedData.investment_memo?.investment_recommendation || null,
+            executive_summary: extractedData.investment_memo?.executive_summary || null,
+            growth_potential: extractedData.investment_memo?.growth_potential || null,
+            strengths_count: extractedData.swot_analysis?.strengths?.length || 0,
+            weaknesses_count: extractedData.swot_analysis?.weaknesses?.length || 0,
+            opportunities_count: extractedData.swot_analysis?.opportunities?.length || 0,
+            threats_count: extractedData.swot_analysis?.threats?.length || 0,
+            risk_flags_count: extractedData.risk_flags?.length || 0
+        };
+        
+        const analysisRef = await db.collection("deals").doc(dealId).collection("analysis").add(analysisDocument);
+        
+        // Also add to a top-level analytics collection for easier BigQuery access
+        await db.collection("analytics").doc(analysisRef.id).set({
+            ...analysisDocument,
+            analysisId: analysisRef.id,
+            collectionPath: `deals/${dealId}/analysis/${analysisRef.id}`
         });
         await db.collection("deals").doc(dealId).update({ status: "4_Analyzed" });
 
@@ -281,6 +311,114 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
 
 
 
+// --- BIGQUERY SYNC FUNCTIONS ---
+
+/**
+ * Backfill existing analysis data to BigQuery-compatible format
+ */
+export const backfillAnalyticsToBigQuery = onCall({ region: LOCATION }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "You must be logged in to backfill analytics.");
+    }
+
+    try {
+        // Get all deals
+        const dealsSnapshot = await db.collection("deals").get();
+        let processedCount = 0;
+        
+        for (const dealDoc of dealsSnapshot.docs) {
+            const dealId = dealDoc.id;
+            const dealData = dealDoc.data();
+            
+            // Get all analysis documents for this deal
+            const analysisSnapshot = await db.collection("deals").doc(dealId).collection("analysis").get();
+            
+            for (const analysisDoc of analysisSnapshot.docs) {
+                const analysisData = analysisDoc.data();
+                const analysisId = analysisDoc.id;
+                
+                // Create BigQuery-compatible document
+                const bigQueryDoc = {
+                    ...analysisData,
+                    analysisId: analysisId,
+                    dealId: dealId,
+                    dealName: dealData.dealName || null,
+                    ownerId: dealData.ownerId || null,
+                    collectionPath: `deals/${dealId}/analysis/${analysisId}`,
+                    backfilledAt: FieldValue.serverTimestamp(),
+                    // Flatten nested objects for BigQuery
+                    metrics_arr_value: analysisData.metrics?.arr?.value || null,
+                    metrics_arr_source: analysisData.metrics?.arr?.source_quote || null,
+                    metrics_mrr_value: analysisData.metrics?.mrr?.value || null,
+                    metrics_mrr_source: analysisData.metrics?.mrr?.source_quote || null,
+                    metrics_cac_value: analysisData.metrics?.cac?.value || null,
+                    metrics_cac_source: analysisData.metrics?.cac?.source_quote || null,
+                    metrics_ltv_value: analysisData.metrics?.ltv?.value || null,
+                    metrics_ltv_source: analysisData.metrics?.ltv?.source_quote || null,
+                    metrics_ltv_cac_ratio_value: analysisData.metrics?.ltv_cac_ratio?.value || null,
+                    metrics_ltv_cac_ratio_source: analysisData.metrics?.ltv_cac_ratio?.source_quote || null,
+                    metrics_gross_margin_value: analysisData.metrics?.gross_margin?.value || null,
+                    metrics_gross_margin_source: analysisData.metrics?.gross_margin?.source_quote || null,
+                    investment_recommendation: analysisData.investment_memo?.investment_recommendation || null,
+                    executive_summary: analysisData.investment_memo?.executive_summary || null,
+                    growth_potential: analysisData.investment_memo?.growth_potential || null,
+                    strengths_count: analysisData.swot_analysis?.strengths?.length || 0,
+                    weaknesses_count: analysisData.swot_analysis?.weaknesses?.length || 0,
+                    opportunities_count: analysisData.swot_analysis?.opportunities?.length || 0,
+                    threats_count: analysisData.swot_analysis?.threats?.length || 0,
+                    risk_flags_count: analysisData.risk_flags?.length || 0
+                };
+                
+                // Add to top-level analytics collection
+                await db.collection("analytics").doc(analysisId).set(bigQueryDoc, { merge: true });
+                processedCount++;
+            }
+        }
+        
+        logger.info(`Successfully backfilled ${processedCount} analysis documents to BigQuery format.`);
+        return { success: true, message: `Backfilled ${processedCount} analysis documents.`, processedCount };
+        
+    } catch (error) {
+        console.error("Error during backfill:", error);
+        throw new HttpsError("internal", "Failed to backfill analytics data.");
+    }
+});
+
+/**
+ * Get analytics data optimized for BigQuery queries
+ */
+export const getAnalyticsForBigQuery = onCall({ region: LOCATION }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "You must be logged in to access analytics.");
+    }
+    
+    try {
+        const { limit = 100, startAfter = null, dealId = null } = request.data;
+        
+        let query = db.collection("analytics").orderBy("analyzedAt", "desc").limit(limit);
+        
+        if (startAfter) {
+            const startAfterDoc = await db.collection("analytics").doc(startAfter).get();
+            if (startAfterDoc.exists) {
+                query = query.startAfter(startAfterDoc);
+            }
+        }
+        
+        if (dealId) {
+            query = query.where("dealId", "==", dealId);
+        }
+        
+        const snapshot = await query.get();
+        const analytics = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        return { success: true, analytics, count: analytics.length };
+        
+    } catch (error) {
+        console.error("Error fetching analytics:", error);
+        throw new HttpsError("internal", "Failed to fetch analytics data.");
+    }
+});
+
 // --- NEW BENCHMARKING FUNCTION ---
 /**
  * Allows an authorized user to add a new document to the benchmarks collection.
@@ -289,7 +427,7 @@ export const addBenchmarkData = onCall({ region: LOCATION }, async (request) => 
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "You must be logged in to add benchmark data.");
     }
-   
+
     const { industry, stage, arr, mrr, cac, ltv } = request.data;
     if (!industry || !stage || arr === undefined) {
         throw new HttpsError("invalid-argument", "Missing required benchmark fields.");

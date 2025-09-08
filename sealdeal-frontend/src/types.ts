@@ -41,3 +41,17 @@ export interface UserProfile {
     role: 'analyst' | 'partner' | 'admin';
 }
 
+// ADDED MISSING INTERFACES
+export interface Deal {
+    id: string;
+    dealName: string;
+    ownerId: string;
+    status: string;
+}
+
+export interface DealDocument {
+    id: string;
+    fileName: string;
+    storagePath: string;
+    uploadedAt: any;
+}

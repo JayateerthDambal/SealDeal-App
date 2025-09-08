@@ -5,15 +5,14 @@ import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 // The 'getFunctions' import was missing from this line
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
-// Your web app's Firebase configuration
-// IMPORTANT: It's better to use environment variables for this in a real app
+// TODO: Later turn this to .env
 const firebaseConfig = {
-  apiKey: "AIzaSyBP0MYTBNJXgQaDenApYczx_TbaQr41k4E",
-  authDomain: "sunlit-setup-470516-q3.firebaseapp.com",
-  projectId: "sunlit-setup-470516-q3",
-  storageBucket: "sunlit-setup-470516-q3.firebasestorage.app",
-  messagingSenderId: "318231552684",
-  appId: "1:318231552684:web:4042d38684c859e5313509"
+  apiKey: "AIzaSyBgVprZ-f_IMuULto8upD7TBdWUwdWKlQc",
+  authDomain: "genai-hackathon-aicommanders.firebaseapp.com",
+  projectId: "genai-hackathon-aicommanders",
+  storageBucket: "genai-hackathon-aicommanders.firebasestorage.app",
+  messagingSenderId: "911058000673",
+  appId: "1:911058000673:web:51550be8136446bc3bfc60"
 };
 
 const app = initializeApp(firebaseConfig);
