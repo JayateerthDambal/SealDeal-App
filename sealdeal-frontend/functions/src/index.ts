@@ -1,152 +1,198 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+// 1. Standard Firebase and Tooling Imports
+import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
 import { onObjectFinalized } from "firebase-functions/v2/storage";
-import * as admin from "firebase-admin";
+import admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
-
-
 import { parse } from "csv-parse/sync";
-import * as Excel from "exceljs";
+import * as XLSX from "xlsx";
+import { BigQuery } from "@google-cloud/bigquery";
+import { VertexAI, GenerateContentResult } from "@google-cloud/vertexai";
 
 
+// 2. Express Imports for the Chat Agent
+import express from "express";
+import bodyParser from "body-parser";
+import cors from "cors";
+
+
+// --- INITIALIZATION ---
 admin.initializeApp();
 const db = admin.firestore();
+const bigquery = new BigQuery();
 
 
-// TODO: Use ENV later.
-const PROJECT_ID = "genai-hackathon-aicommanders";
+// --- CONFIGURATION ---
+const PROJECT_ID = "sunlit-setup-470516-q3";
 const LOCATION = "asia-south1";
+const BIGQUERY_DATASET = "deal_analysis";
+const BIGQUERY_TABLE = "analyses";
 
 
+// --- EMULATOR SETTINGS ---
 if (process.env.FUNCTIONS_EMULATOR === "true") {
     logger.info("Emulator detected! Connecting to local Firestore instance.");
     db.settings({ host: "localhost:8080", ssl: false });
 }
 
+// --- RBAC HELPER ---
+/**
+ * Checks if the calling user has the required role or is a general admin.
+ * Throws an HttpsError if the user is not authorized.
+ */
+const ensureHasRole = async (uid: string, requiredRole: string) => {
+    const user = await admin.auth().getUser(uid);
+    const userRole = user.customClaims?.role as string | undefined;
+    // Admins have all permissions. Otherwise, check for the specific role.
+    if (userRole !== "admin" && userRole !== requiredRole) {
+        throw new HttpsError("permission-denied", `You must have the '${requiredRole}' or 'admin' role to perform this action.`);
+    }
+};
 
-// createDeal function remains the same.
-export const createDeal = onCall({ region: LOCATION }, async (request) => {
+// --- RBAC & BENCHMARKING FUNCTIONS ---
+
+export const setUserRole = onCall({ region: LOCATION, cors: true }, async (request) => {
     if (!request.auth) { throw new HttpsError("unauthenticated", "You must be logged in."); }
-    const dealName = request.data.dealName;
+    // Use the role checker to ensure the caller is an admin
+    await ensureHasRole(request.auth.uid, "admin");
+
+    const { targetUid, newRole } = request.data;
+    if (!targetUid || !newRole) {
+        throw new HttpsError("invalid-argument", "A 'targetUid' and 'newRole' must be provided.");
+    }
+    try {
+        await admin.auth().setCustomUserClaims(targetUid, { role: newRole });
+        logger.info(`Admin ${request.auth.uid} successfully set role '${newRole}' for user ${targetUid}`);
+        return { success: true, message: `User role has been updated to ${newRole}.` };
+    } catch (error) {
+        logger.error("Error setting user role:", error);
+        throw new HttpsError("internal", "Failed to set user role.");
+    }
+});
+
+export const addBenchmarkData = onCall({ region: LOCATION, cors: true }, async (request) => {
+    if (!request.auth) { throw new HttpsError("unauthenticated", "You must be logged in."); }
+    // Check if user is an admin or a benchmarking_admin
+    await ensureHasRole(request.auth.uid, "benchmarking_admin");
+    
+    const { industry, stage, arr } = request.data;
+    if (!industry || !stage || arr === undefined) {
+        throw new HttpsError("invalid-argument", "Industry, stage, and ARR are required.");
+    }
+    try {
+        const benchmarkDoc = { ...request.data, addedBy: request.auth.uid, createdAt: FieldValue.serverTimestamp() };
+        await db.collection("benchmarks").add(benchmarkDoc);
+        return { success: true, message: "Benchmark data added successfully." };
+    } catch (error) {
+        logger.error("Error adding benchmark data:", error);
+        throw new HttpsError("internal", "Failed to add benchmark data.");
+    }
+});
+
+// --- STANDARD APPLICATION FUNCTIONS ---
+
+
+export const createDeal = onCall({ region: LOCATION, cors: true }, async (request) => {
+    if (!request.auth) { throw new HttpsError("unauthenticated", "You must be logged in."); }
+    const { dealName } = request.data;
     if (!dealName) { throw new HttpsError("invalid-argument", "A 'dealName' must be provided."); }
     try {
-        const dealData = {
-            ownerId: request.auth.uid, dealName, status: "1_Uploaded",
-            createdAt: FieldValue.serverTimestamp(),
-        };
+        const dealData = { ownerId: request.auth.uid, dealName, status: "1_AwaitingUpload", createdAt: FieldValue.serverTimestamp() };
         const dealRef = await db.collection("deals").add(dealData);
         return { dealId: dealRef.id, message: "Deal created successfully." };
     } catch (error) {
-        console.error("Error creating deal:", error);
-        throw new HttpsError("internal", "Firestore write failed.");
+        logger.error("Error creating Deal in Firestore:", error);
+        throw new HttpsError("internal", "Firestore write failed while creating deal.");
     }
 });
 
 
-// linkDocumentToDeal function remains the same.
-export const linkDocumentToDeal = onObjectFinalized({ region: LOCATION }, async (event) => {
+export const processUploadedFile = onObjectFinalized({ region: LOCATION }, async (event) => {
     const file = event.data;
     const filePath = file.name;
     const fileName = filePath?.split("/").pop();
     if (!filePath || !fileName) { return; }
+
+
     const pathParts = filePath.split("/");
-    if (pathParts.length !== 4) { return; }
+    if (pathParts.length !== 4 || pathParts[0] !== "uploads") { return; }
+
+
+    const userId = pathParts[1];
     const dealId = pathParts[2];
+
+
     try {
-        await db.collection("deals").doc(dealId).collection("documents").add({
-            fileName, storagePath: filePath,
-            uploadedAt: FieldValue.serverTimestamp(),
-        });
-        logger.info(`Successfully linked ${fileName} to deal ${dealId}`);
+        await db.collection("deals").doc(dealId).collection("documents").add({ fileName, storagePath: filePath, uploadedAt: FieldValue.serverTimestamp() });
+        await db.collection("deals").doc(dealId).update({ status: "2_Processing" });
+        await runAnalysisLogic(dealId, userId);
     } catch (error) {
-        console.error(`Error linking document to deal ${dealId}:`, error);
+        logger.error(`Error processing file for deal ${dealId}:`, error);
+        await db.collection("deals").doc(dealId).update({ status: "Error_Processing_Failed" }).catch();
+    }
+});
+
+
+export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeconds: 540, cors: true }, async (request) => {
+    if (!request.auth) { throw new HttpsError("unauthenticated", "Authentication is required."); }
+    const { dealId } = request.data;
+    if (!dealId) { throw new HttpsError("invalid-argument", "A 'dealId' must be provided."); }
+    try {
+        return await runAnalysisLogic(dealId, request.auth.uid);
+    } catch (error) {
+        logger.error(`Error during HTTP-triggered analysis for deal ${dealId}:`, error);
+        await db.collection("deals").doc(dealId).update({ status: "Error_Analysis_Failed" }).catch();
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+        throw new HttpsError("internal", "An error occurred during the analysis.", { details: errorMessage });
     }
 });
 
 
 
 
-// --- UPGRADED AI FUNCTION ---
-/**
- * A user-triggered function to perform a comprehensive analysis on ALL
- * documents associated with a deal, now with expanded file type support.
- */
-export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeconds: 540 }, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "You must be logged in to start an analysis.");
-    }
-    const { dealId } = request.data;
-    if (!dealId) {
-        throw new HttpsError("invalid-argument", "A 'dealId' must be provided.");
-    }
-
-
-    logger.info(`Starting comprehensive analysis for deal ${dealId}...`);
-    await db.collection("deals").doc(dealId).update({ status: "2_Processing" });
+async function runAnalysisLogic(dealId: string, uid: string) {
+    logger.info(`Starting comprehensive analysis logic for deal ${dealId}...`);
 
 
     try {
-        // Step 1: Fetch and process all documents for the deal
-        const documentsSnapshot = await db.collection("deals").doc(dealId).collection("documents").get();
-        if (documentsSnapshot.empty) {
-            throw new Error("No documents found for this deal.");
+        // --- BIGQUERY FIX PART 1: Get the deal document to access its name ---
+        const dealDoc = await db.collection("deals").doc(dealId).get();
+        if (!dealDoc.exists) {
+            throw new Error(`Deal with ID ${dealId} not found.`);
         }
+        const dealName = dealDoc.data()?.dealName || "Unknown Deal";
+
+
+        const documentsSnapshot = await db.collection("deals").doc(dealId).collection("documents").get();
+        if (documentsSnapshot.empty) { throw new Error(`No documents found for deal ${dealId}.`); }
 
 
         const documentPromises = documentsSnapshot.docs.map(async (doc) => {
             const { storagePath, fileName } = doc.data();
             const [fileBuffer] = await admin.storage().bucket().file(storagePath).download();
 
-            // --- EXPANDED FILE TYPE HANDLING ---
-            if (fileName.endsWith('.pdf')) {
-                return { type: 'presentation', data: fileBuffer.toString('base64'), fileName, mimeType: 'application/pdf' };
-            } else if (fileName.endsWith('.pptx')) {
-                return { type: 'presentation', data: fileBuffer.toString('base64'), fileName, mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
-            } else {
-                let content = "";
-                if (fileName.endsWith('.csv')) {
-                    content = parse(fileBuffer).join('\n');
-                } else if (fileName.endsWith('.xlsx')) {
-                    const workbook = new Excel.Workbook();
-                    // DEFINITIVE FIX: Use a type assertion to resolve the incompatibility.
-                    await workbook.xlsx.load(fileBuffer as Buffer);
-                    const worksheet = workbook.worksheets[0];
-                    const csvData: string[] = [];
-                    worksheet.eachRow((row) => {
-                        csvData.push((row.values as Excel.CellValue[]).slice(1).join(','));
-                    });
-                    content = csvData.join('\n');
-                } else if (fileName.endsWith('.json')) {
-                    content = JSON.stringify(JSON.parse(fileBuffer.toString('utf-8')));
-                } else {
-                    content = fileBuffer.toString('utf-8');
-                }
-                return { type: 'text', data: content, fileName };
-            }
+
+            if (fileName.endsWith(".pdf")) { return { type: "presentation", data: fileBuffer.toString("base64"), fileName, mimeType: "application/pdf" }; }
+            if (fileName.endsWith(".pptx")) { return { type: "presentation", data: fileBuffer.toString("base64"), fileName, mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }; }
+           
+            let content = "";
+            if (fileName.endsWith(".csv")) { content = parse(fileBuffer).join("\n"); }
+            else if (fileName.endsWith(".xlsx")) {
+                const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                content = XLSX.utils.sheet_to_csv(worksheet);
+            } else { content = fileBuffer.toString("utf-8"); }
+            return { type: "text", data: content, fileName };
         });
 
 
         const processedDocuments = await Promise.all(documentPromises);
-
-
-        // Step 2: Prepare the content for Gemini
-        const presentationParts = processedDocuments
-            .filter(d => d.type === 'presentation')
-            .map(d => ({ inline_data: { mime_type: d.mimeType, data: d.data } }));
-
-        const textContent = processedDocuments
-            .filter(d => d.type === 'text')
-            .map(d => `--- [START OF DOCUMENT: ${d.fileName}] ---\n${d.data}\n--- [END OF DOCUMENT: ${d.fileName}] ---`)
-            .join('\n\n');
-
-
-        // Step 3: Fetch Benchmark Data
+        const presentationParts = processedDocuments.filter((d) => d.type === "presentation" && d.mimeType).map((d) => ({ inline_data: { mime_type: d.mimeType!, data: d.data } }));
+        const textContent = processedDocuments.filter((d) => d.type === "text").map((d) => `--- [START OF DOCUMENT: ${d.fileName}] ---\n${d.data}\n--- [END OF DOCUMENT: ${d.fileName}] ---`).join("\n\n");
         const benchmarkSnapshot = await db.collection("benchmarks").where("industry", "==", "SaaS").limit(10).get();
         const benchmarkData = benchmarkSnapshot.docs.map((doc) => doc.data());
-        logger.info(`Fetched ${benchmarkData.length} benchmark comparables.`);
 
 
-        // Step 4: Construct the Advanced AI Prompt
         const prompt = `
             Act as a world-class venture capital analyst. Your task is to perform a comprehensive due diligence analysis of a startup based on a collection of provided documents (which may include pitch decks, financial models, etc.) and peer benchmark data.
 
@@ -160,8 +206,8 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
             1.  **Metric Extraction & Calculation**:
                 - Identify and extract key financial and traction metrics.
                 - Understand concepts, not just keywords (e.g., "Lifetime Value" is LTV).
-                - If a primary metric isn't stated, calculate it from its components if possible (e.g., LTV = ARPU / Churn Rate).
-                - For each metric, provide the 'value' and the exact 'source_quote' from the document that supports it. If calculated, explain in the 'notes'.
+                - If a primary metric isn"t stated, calculate it from its components if possible (e.g., LTV = ARPU / Churn Rate).
+                - For each metric, provide the "value" and the exact "source_quote" from the document that supports it. If calculated, explain in the "notes".
 
 
             2.  **SWOT Analysis**:
@@ -170,18 +216,18 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
 
             3.  **Risk Assessment**:
                 - Analyze the document for common investment red flags: inflated or poorly defined market size (TAM/SAM/SOM), unrealistic growth projections, high churn, weak unit economics (LTV:CAC), or key metrics missing entirely.
-                - List any identified risks as clear, concise strings in the 'risk_flags' array.
+                - List any identified risks as clear, concise strings in the "risk_flags" array.
 
 
             4.  **Benchmarking & Market Context**:
-                - Compare the startup's key metrics (especially ARR and LTV:CAC ratio) against the provided benchmark data.
-                - In the 'benchmarking_summary', state whether the startup is performing below, at, or above the median for its peers and provide brief context.
+                - Compare the startup"s key metrics (especially ARR and LTV:CAC ratio) against the provided benchmark data.
+                - In the "benchmarking_summary", state whether the startup is performing below, at, or above the median for its peers and provide brief context.
 
 
             5.  **Investment Memo Synthesis**:
                 - **Executive Summary**: Write a brief, neutral, 2-3 sentence executive summary of the investment opportunity.
-                - **Growth Potential**: Write a 2-3 sentence summary of the startup's growth potential and strategy.
-                - **Recommendation**: Provide a final 'investment_recommendation' from one of the following options: "Strong Candidate", "Proceed with Caution", "Further Diligence Required", or "Pass".
+                - **Growth Potential**: Write a 2-3 sentence summary of the startup"s growth potential and strategy.
+                - **Recommendation**: Provide a final "investment_recommendation" from one of the following options: "Strong Candidate", "Proceed with Caution", "Further Diligence Required", or "Pass".
 
 
             **RESPONSE FORMAT**:
@@ -221,19 +267,13 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
               }
             }
         `;
-
-        const allParts = [{ text: prompt }, ...presentationParts];
-        if (textContent.trim().length > 0) {
-            allParts.push({ text: textContent });
-        }
-
+       
+        const allParts: ({ text: string } | { inline_data: { mime_type: string; data: string } })[] = [{ text: prompt }, ...presentationParts];
+        if (textContent.trim().length > 0) allParts.push({ text: textContent });
+       
         const requestBody = { contents: [{ role: "user", parts: allParts }] };
-        console.log(PROJECT_ID);
-
         const model = "gemini-1.5-flash-002";
         const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${model}:generateContent`;
-        console.log(url)
-
         const credential = admin.credential.applicationDefault();
         const accessToken = await credential.getAccessToken();
         const response = await fetch(url, {
@@ -249,21 +289,19 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
         if (!jsonResponse) { throw new Error("Gemini returned an invalid response."); }
 
 
-        const startIndex = jsonResponse.indexOf('{');
-        const endIndex = jsonResponse.lastIndexOf('}');
-        const jsonString = jsonResponse.substring(startIndex, endIndex + 1);
-        const extractedData = JSON.parse(jsonString);
+        const extractedData = JSON.parse(jsonResponse.substring(jsonResponse.indexOf("{"), jsonResponse.lastIndexOf("}") + 1));
+        const analysisDocument = { ...extractedData, sourceFiles: documentsSnapshot.docs.map((d) => d.data().fileName), analyzedAt: FieldValue.serverTimestamp(), dealId: dealId, createdBy: uid, version: "2.0" };
+        const analysisRef = await db.collection("deals").doc(dealId).collection("analysis").add(analysisDocument);
+        logger.info(`Analysis saved to Firestore for deal ${dealId}.`);
 
 
-        // Ensure BigQuery-compatible data structure
-        const analysisDocument = {
-            ...extractedData,
-            sourceFiles: documentsSnapshot.docs.map(d => d.data().fileName),
-            analyzedAt: FieldValue.serverTimestamp(),
-            dealId: dealId, // Add dealId for BigQuery joins
-            createdBy: request.auth.uid,
-            version: "1.0",
-            // Flatten nested objects for BigQuery compatibility
+        const bqRow = {
+            analysisId: analysisRef.id,
+            dealId: dealId,
+            dealName: dealName,
+            createdBy: uid,
+            analyzedAt: new Date().toISOString(),
+            sourceFiles: documentsSnapshot.docs.map((d) => d.data().fileName),
             metrics_arr_value: extractedData.metrics?.arr?.value || null,
             metrics_arr_source: extractedData.metrics?.arr?.source_quote || null,
             metrics_mrr_value: extractedData.metrics?.mrr?.value || null,
@@ -279,179 +317,301 @@ export const startComprehensiveAnalysis = onCall({ region: LOCATION, timeoutSeco
             investment_recommendation: extractedData.investment_memo?.investment_recommendation || null,
             executive_summary: extractedData.investment_memo?.executive_summary || null,
             growth_potential: extractedData.investment_memo?.growth_potential || null,
-            strengths_count: extractedData.swot_analysis?.strengths?.length || 0,
-            weaknesses_count: extractedData.swot_analysis?.weaknesses?.length || 0,
-            opportunities_count: extractedData.swot_analysis?.opportunities?.length || 0,
-            threats_count: extractedData.swot_analysis?.threats?.length || 0,
-            risk_flags_count: extractedData.risk_flags?.length || 0
+            benchmarking_summary: extractedData.benchmarking_summary || null,
+            strengths: extractedData.swot_analysis?.strengths || [],
+            weaknesses: extractedData.swot_analysis?.weaknesses || [],
+            opportunities: extractedData.swot_analysis?.opportunities || [],
+            threats: extractedData.swot_analysis?.threats || [],
+            risk_flags: extractedData.risk_flags || [],
         };
-        
-        const analysisRef = await db.collection("deals").doc(dealId).collection("analysis").add(analysisDocument);
-        
-        // Also add to a top-level analytics collection for easier BigQuery access
-        await db.collection("analytics").doc(analysisRef.id).set({
-            ...analysisDocument,
-            analysisId: analysisRef.id,
-            collectionPath: `deals/${dealId}/analysis/${analysisRef.id}`
-        });
+
+
+        await bigquery.dataset(BIGQUERY_DATASET).table(BIGQUERY_TABLE).insert([bqRow]);
+        logger.info(`Analysis for deal ${dealId} successfully exported to BigQuery.`);
+       
         await db.collection("deals").doc(dealId).update({ status: "4_Analyzed" });
-
-
         return { success: true, message: "Analysis completed successfully." };
-
-
     } catch (error) {
-        console.error("Error during comprehensive analysis:", error);
-        await db.collection("deals").doc(dealId).update({ status: "Error_Analysis_Failed" });
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-        throw new HttpsError("internal", "An error occurred during the analysis.", { details: errorMessage });
+        throw error;
     }
+}
+
+// --- CROSS-DEAL COMPARISON FUNCTION ---
+
+export const getComparisonData = onCall({ region: LOCATION, cors: true }, async (request) => {
+    if (!request.auth) { throw new HttpsError("unauthenticated", "You must be logged in."); }
+    const { dealIds } = request.data as { dealIds: string[] };
+    if (!dealIds || !Array.isArray(dealIds) || dealIds.length === 0) {
+        throw new HttpsError("invalid-argument", "An array of 'dealIds' must be provided.");
+    }
+    const comparisonPromises = dealIds.map(async (dealId) => {
+        const dealDoc = await db.collection("deals").doc(dealId).get();
+        const analysisQuery = await db.collection("deals").doc(dealId).collection("analysis").orderBy("analyzedAt", "desc").limit(1).get();
+        return { dealId, dealName: dealDoc.data()?.dealName || "Unknown", analysis: analysisQuery.empty ? null : analysisQuery.docs[0].data() };
+    });
+    const comparisonData = await Promise.all(comparisonPromises);
+    return { success: true, data: comparisonData };
 });
 
 
+// --- CHAT AGENT (EXPRESS APP) ---
 
 
-// --- BIGQUERY SYNC FUNCTIONS ---
+const agentApp = express();
+agentApp.use(cors({ origin: true }));
+agentApp.use(bodyParser.json());
 
-/**
- * Backfill existing analysis data to BigQuery-compatible format
- */
-export const backfillAnalyticsToBigQuery = onCall({ region: LOCATION }, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "You must be logged in to backfill analytics.");
+
+const vertex_ai = new VertexAI({ project: PROJECT_ID, location: "asia-south1" });
+const generativeModel = vertex_ai.getGenerativeModel({ model: "gemini-1.5-flash-002" });
+
+
+// --- UPDATED HELPER FUNCTIONS FOR RESPONSE FORMATTING ---
+
+
+// Makes column names like 'metrics_arr_value' more human-readable -> 'ARR'
+function formatHeader(header: string): string {
+    return header.replace(/metrics_|_value|_source/g, " ").replace(/_/g, " ").trim().toUpperCase();
+}
+
+
+// Formats values, adding USD for known currency metrics
+function formatValue(key: string, value: unknown): string {
+    if (typeof value !== "number") {
+        return String(value);
+    }
+    const currencyMetrics = ["arr", "mrr", "cac", "ltv"];
+    if (currencyMetrics.some(metric => key.toLowerCase().includes(metric))) {
+        return new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            notation: "compact",
+            maximumFractionDigits: 2
+        }).format(value);
+    }
+    return value.toLocaleString();
+}
+
+
+// Main formatting logic with new single-value handling
+function formatBigQueryResults(rows: Record<string, unknown>[]): string {
+    if (!rows || rows.length === 0) return "No results found for your query.";
+
+
+    // Handle single-value results with a conversational sentence
+    if (rows.length === 1 && Object.keys(rows[0]).length === 1) {
+        const key = Object.keys(rows[0])[0];
+        const value = rows[0][key];
+        const formattedValue = formatValue(key, value);
+        const formattedKey = formatHeader(key);
+        return `The ${formattedKey} is ${formattedValue}.`;
     }
 
+
+    // Handle table results with formatted values
+    const headers = Object.keys(rows[0]);
+    const formattedHeaders = headers.map(formatHeader);
+    const tableHeader = `| ${formattedHeaders.join(" | ")} |`;
+    const separator = `| ${headers.map(() => "---").join(" | ")} |`;
+    const tableRows = rows.map(row =>
+        `| ${headers.map(header => formatValue(header, row[header])).join(" | ")} |`
+    );
+
+
+    return [tableHeader, separator, ...tableRows].join("\n");
+}
+
+
+// Helper for implementing retries with delay
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+
+agentApp.post("/chat", async (req, res) => {
     try {
-        // Get all deals
-        const dealsSnapshot = await db.collection("deals").get();
-        let processedCount = 0;
-        
-        for (const dealDoc of dealsSnapshot.docs) {
-            const dealId = dealDoc.id;
-            const dealData = dealDoc.data();
-            
-            // Get all analysis documents for this deal
-            const analysisSnapshot = await db.collection("deals").doc(dealId).collection("analysis").get();
-            
-            for (const analysisDoc of analysisSnapshot.docs) {
-                const analysisData = analysisDoc.data();
-                const analysisId = analysisDoc.id;
-                
-                // Create BigQuery-compatible document
-                const bigQueryDoc = {
-                    ...analysisData,
-                    analysisId: analysisId,
-                    dealId: dealId,
-                    dealName: dealData.dealName || null,
-                    ownerId: dealData.ownerId || null,
-                    collectionPath: `deals/${dealId}/analysis/${analysisId}`,
-                    backfilledAt: FieldValue.serverTimestamp(),
-                    // Flatten nested objects for BigQuery
-                    metrics_arr_value: analysisData.metrics?.arr?.value || null,
-                    metrics_arr_source: analysisData.metrics?.arr?.source_quote || null,
-                    metrics_mrr_value: analysisData.metrics?.mrr?.value || null,
-                    metrics_mrr_source: analysisData.metrics?.mrr?.source_quote || null,
-                    metrics_cac_value: analysisData.metrics?.cac?.value || null,
-                    metrics_cac_source: analysisData.metrics?.cac?.source_quote || null,
-                    metrics_ltv_value: analysisData.metrics?.ltv?.value || null,
-                    metrics_ltv_source: analysisData.metrics?.ltv?.source_quote || null,
-                    metrics_ltv_cac_ratio_value: analysisData.metrics?.ltv_cac_ratio?.value || null,
-                    metrics_ltv_cac_ratio_source: analysisData.metrics?.ltv_cac_ratio?.source_quote || null,
-                    metrics_gross_margin_value: analysisData.metrics?.gross_margin?.value || null,
-                    metrics_gross_margin_source: analysisData.metrics?.gross_margin?.source_quote || null,
-                    investment_recommendation: analysisData.investment_memo?.investment_recommendation || null,
-                    executive_summary: analysisData.investment_memo?.executive_summary || null,
-                    growth_potential: analysisData.investment_memo?.growth_potential || null,
-                    strengths_count: analysisData.swot_analysis?.strengths?.length || 0,
-                    weaknesses_count: analysisData.swot_analysis?.weaknesses?.length || 0,
-                    opportunities_count: analysisData.swot_analysis?.opportunities?.length || 0,
-                    threats_count: analysisData.swot_analysis?.threats?.length || 0,
-                    risk_flags_count: analysisData.risk_flags?.length || 0
-                };
-                
-                // Add to top-level analytics collection
-                await db.collection("analytics").doc(analysisId).set(bigQueryDoc, { merge: true });
-                processedCount++;
+        const { sessionId, message } = req.body;
+        if (!sessionId || !message) {
+            return res.status(400).json({ error: "sessionId and message are required" });
+        }
+
+
+        const sessionRef = db.collection("chat_sessions").doc(sessionId);
+        await sessionRef.collection("messages").add({ role: "user", text: message, timestamp: FieldValue.serverTimestamp() });
+
+
+        // --- INTENT CLASSIFICATION STEP ---
+        const classificationPrompt = `
+            Your task is to classify the user's intent. Respond with only one of two possible values: "data_query" or "insights_query".
+            - "data_query": The user is asking for specific data points, numbers, or lists from their internal database (e.g., "What is the ARR for Test 1?", "List all deals").
+            - "insights_query": The user is asking for general knowledge, trends, explanations, or information that requires up-to-date, external world knowledge (e.g., "What are the latest trends in the SaaS market?", "Explain LTV/CAC ratio").
+            User message: "${message}"
+            Intent:
+        `;
+        const intentResult = await generativeModel.generateContent(classificationPrompt);
+        const intent = intentResult.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "insights_query";
+        logger.info("User intent classified as:", { intent });
+
+
+        let formattedResults = "";
+        // eslint-disable-next-line prefer-const
+        let sqlQuery = "N/A";
+       
+        if (intent === "data_query") {
+            // --- ENHANCED PROMPT WITH MORE DETAIL AND GUARDRAILS ---
+            const schema = `
+          Table 1: \`sunlit-setup-470516-q3.deal_analysis.analyses\` (This table contains the user's private, analyzed deals).
+          Key Columns & Common Synonyms:
+          - dealName: STRING (The display name of the deal. Synonyms: "deal name", "company name")
+          - metrics_arr_value: FLOAT (Annual Recurring Revenue in USD. Synonyms: "ARR", "annual revenue")
+          - metrics_mrr_value: FLOAT (Monthly Recurring Revenue in USD. Synonyms: "MRR", "monthly revenue")
+          - metrics_ltv_value: FLOAT (Customer Lifetime Value in USD. Synonyms: "LTV", "lifetime value")
+          - metrics_ltv_cac_ratio_value: FLOAT (Ratio of LTV to Customer Acquisition Cost. Synonyms: "LTV/CAC ratio", "ltv cac")
+          - investment_recommendation: STRING (e.g., "Strong Candidate", "Pass". Synonyms: "recommendation", "verdict")
+          - strengths: STRING (REPEATED)
+          - risk_flags: STRING (REPEATED. Synonyms: "risks", "flags", "red flags")
+
+
+          Table 2: \`sunlit-setup-470516-q3.genhackathon.InvestmentVC\` (This table contains public, historical data about VC investments for benchmarking).
+          Key Columns & Common Synonyms:
+          - name: STRING (The official company name. Synonyms: "company", "organization")
+          - market: STRING (The industry market, e.g., 'Hospitality', 'Education'. Synonyms: "industry", "sector")
+          - funding_total_usd: FLOAT (Total venture funding in USD. Synonyms: "total funding", "investment")
+        `;
+
+
+            const prompt = `
+            You are a world-class BigQuery SQL expert. Your task is to convert a natural language question into a single, valid BigQuery SQL query.
+           
+            RULES:
+            1.  You have access to two tables. Use the following detailed schemas: ${schema}
+            2.  You can join these tables on \`deal_analysis.analyses.dealName\` = \`genhackathon.InvestmentVC.name\`.
+            3.  You MUST map natural language terms and acronyms to the correct technical column names based on the schema descriptions and synonyms. For example, if a user asks for "LTV", you must query the "metrics_ltv_value" column.
+            4.  Prioritize querying the \`deal_analysis.analyses\` table if the question refers to the user's own deals (e.g., "Test 1", "my deals").
+            5.  Respond ONLY with the raw SQL query. Do not include any other text, formatting, or explanations.
+
+
+            Example 1 (Querying User's Deals with Synonym and Case-Insensitivity):
+            Question: "What is the LTV for test 1?"
+            SQL: SELECT metrics_ltv_value FROM \`sunlit-setup-470516-q3.deal_analysis.analyses\` WHERE LOWER(dealName) = 'test 1'
+
+
+            Example 2 (Querying Public Data):
+            Question: "list the top 5 companies in the Hospitality sector by total funding"
+            SQL: SELECT name, funding_total_usd FROM \`sunlit-setup-470516-q3.genhackathon.InvestmentVC\` WHERE market = 'Hospitality' ORDER BY funding_total_usd DESC LIMIT 5
+
+
+            Example 3 (Complex Join):
+            Question: "compare the total funding of Test 1 with the average funding in its market"
+            SQL: WITH DealMarket AS (SELECT T2.market FROM \`sunlit-setup-470516-q3.deal_analysis.analyses\` AS T1 JOIN \`sunlit-setup-470516-q3.genhackathon.InvestmentVC\` AS T2 ON T1.dealName = T2.name WHERE T1.dealName = 'Test 1') SELECT t1.dealName, t2.funding_total_usd, (SELECT AVG(funding_total_usd) FROM \`sunlit-setup-470516-q3.genhackathon.InvestmentVC\` WHERE market = (SELECT market FROM DealMarket)) as average_market_funding FROM \`sunlit-setup-470516-q3.deal_analysis.analyses\` AS t1 JOIN \`sunlit-setup-470516-q3.genhackathon.InvestmentVC\` AS t2 ON t1.dealName = t2.name WHERE t1.dealName = 'Test 1'
+
+
+            ---
+            Now, convert the following question based on all the rules above:
+            Question: "${message}"
+            SQL:
+        `;
+        // --- RETRY LOGIC STARTS HERE ---
+        let llmResp: GenerateContentResult | undefined;
+        const maxRetries = 3;
+        let attempt = 0;
+        let lastError: Error | null = null;
+
+
+        while (attempt < maxRetries) {
+            try {
+                llmResp = await generativeModel.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }] });
+                break; // Success, exit loop
+            } catch (err: unknown) {
+                lastError = err as Error;
+                // Specifically check for 429 Resource Exhausted error
+                if (lastError.message.includes("429")) {
+                    attempt++;
+                    if (attempt < maxRetries) {
+                        const delayTime = Math.pow(2, attempt) * 1000; // 2s, 4s
+                        logger.warn(`Rate limit hit. Retrying in ${delayTime / 1000}s...`);
+                        await delay(delayTime);
+                    }
+                } else {
+                    // It's a different kind of error, don't retry
+                    throw lastError;
+                }
             }
         }
-        
-        logger.info(`Successfully backfilled ${processedCount} analysis documents to BigQuery format.`);
-        return { success: true, message: `Backfilled ${processedCount} analysis documents.`, processedCount };
-        
-    } catch (error) {
-        console.error("Error during backfill:", error);
-        throw new HttpsError("internal", "Failed to backfill analytics data.");
-    }
-});
 
-/**
- * Get analytics data optimized for BigQuery queries
- */
-export const getAnalyticsForBigQuery = onCall({ region: LOCATION }, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "You must be logged in to access analytics.");
-    }
-    
-    try {
-        const { limit = 100, startAfter = null, dealId = null } = request.data;
-        
-        let query = db.collection("analytics").orderBy("analyzedAt", "desc").limit(limit);
-        
-        if (startAfter) {
-            const startAfterDoc = await db.collection("analytics").doc(startAfter).get();
-            if (startAfterDoc.exists) {
-                query = query.startAfter(startAfterDoc);
-            }
+
+        if (!llmResp) {
+            logger.error("Failed to get response from Vertex AI after multiple retries.", { lastError });
+            throw new HttpsError("unavailable", "The AI service is currently overloaded. Please try again later.");
         }
-        
-        if (dealId) {
-            query = query.where("dealId", "==", dealId);
+        // --- RETRY LOGIC ENDS HERE ---
+       
+        const sqlQuery = llmResp.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim().replace(/```sql|```/g, "") || "";
+
+
+        if (!sqlQuery) {
+            throw new Error("Could not generate a valid SQL query.");
         }
-        
-        const snapshot = await query.get();
-        const analytics = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        return { success: true, analytics, count: analytics.length };
-        
-    } catch (error) {
-        console.error("Error fetching analytics:", error);
-        throw new HttpsError("internal", "Failed to fetch analytics data.");
+       
+        const [rows] = await bigquery.query({ query: sqlQuery });
+        const formattedResults = formatBigQueryResults(rows);
+
+
+        await sessionRef.collection("messages").add({
+            role: "assistant",
+            sql: sqlQuery,
+            result: formattedResults,
+            timestamp: FieldValue.serverTimestamp(),
+        });
+
+
+        return res.json({
+            sql: sqlQuery,
+            result: rows,
+            formatted: formattedResults,
+        });
+
+
+    }else {
+            // --- Logic for Web-Grounded Insights ---
+            const insightsPrompt = `
+                Act as an expert investment analyst. The user is asking for market insights or explanations.
+                Answer the following question in a comprehensive, well-structured, and helpful way.
+                Use your general knowledge and the provided search results to formulate your answer.
+                Format your response using Markdown.
+                Question: "${message}"
+            `;
+           
+            const groundedResult = await generativeModel.generateContent({
+                contents: [{ role: "user", parts: [{ text: insightsPrompt }] }],
+                tools: [{ "googleSearchRetrieval": {} }] // Enable Google Search grounding
+            });
+
+
+            formattedResults = groundedResult.response.candidates?.[0]?.content?.parts?.[0]?.text || "I was unable to find any information on that topic.";
+        }
+
+
+        // --- Store and Respond ---
+        await sessionRef.collection("messages").add({
+            role: "assistant", sql: sqlQuery, result: formattedResults, timestamp: FieldValue.serverTimestamp(),
+        });
+
+
+        return res.json({ sql: sqlQuery, formatted: formattedResults });
+    }
+       
+        catch (err: unknown) {
+        const error = err as Error;
+        logger.error("Chat Agent Error:", error.message, { originalError: err });
+        // Return a more specific error if it's the one we handled
+        if (error instanceof HttpsError && (error as HttpsError).code === "unavailable") {
+            return res.status(503).json({ error: error.message });
+        }
+        return res.status(500).json({ error: "Sorry, I encountered an error processing your request." });
     }
 });
 
-// --- NEW BENCHMARKING FUNCTION ---
-/**
- * Allows an authorized user to add a new document to the benchmarks collection.
- */
-export const addBenchmarkData = onCall({ region: LOCATION }, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "You must be logged in to add benchmark data.");
-    }
 
-    const { industry, stage, arr, mrr, cac, ltv } = request.data;
-    if (!industry || !stage || arr === undefined) {
-        throw new HttpsError("invalid-argument", "Missing required benchmark fields.");
-    }
-
-
-    try {
-        const benchmarkDoc = {
-            industry, stage, arr, mrr, cac, ltv,
-            ltv_cac_ratio: (ltv && cac) ? ltv / cac : null,
-            source: "Manual Contributor",
-            addedBy: request.auth.uid,
-            createdAt: FieldValue.serverTimestamp(),
-        };
-        await db.collection("benchmarks").add(benchmarkDoc);
-        logger.info("Successfully added new benchmark data.", { data: benchmarkDoc });
-        return { success: true, message: "Benchmark data added." };
-    } catch (error) {
-        console.error("Error adding benchmark data:", error);
-        throw new HttpsError("internal", "Could not add benchmark data to Firestore.");
-    }
-});
-
-
-
-
+// CORRECTED: Export the Express app by wrapping it in onRequest.
+// This creates a single, regionally-aware HTTP endpoint for the agent.
+export const chatAgent = onRequest({ region: "asia-south1" }, agentApp);
 

@@ -1,4 +1,8 @@
 {
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
   "hosting": {
     "public": "dist",
     "ignore": [
@@ -13,25 +17,13 @@
       }
     ]
   },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log"
-      ],
-      "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run lint",
-        "npm --prefix \"$RESOURCE_DIR\" run build"
-      ]
-    }
-  ],
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
+  "functions": {
+    "source": "functions",
+    "predeploy": [
+      "npm --prefix \"$RESOURCE_DIR\" run lint",
+      "npm --prefix \"$RESOURCE_DIR\" run build"
+    ],
+    "runtime": "nodejs20"
   },
   "storage": {
     "rules": "storage.rules"
@@ -46,13 +38,11 @@
     "firestore": {
       "port": 8080
     },
-    "storage": {
-      "port": 9199,
-      "rules": "storage.rules"
-    },
     "hosting": {
-      "port": 5002,
-      "host": "localhost"
+      "port": 5002
+    },
+    "storage": {
+      "port": 9199
     },
     "ui": {
       "enabled": true,
@@ -60,3 +50,4 @@
     }
   }
 }
+
