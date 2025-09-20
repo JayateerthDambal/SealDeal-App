@@ -6,18 +6,43 @@ import { Deal, Analysis } from '../types';
 import DealsListView from '../components/deals/DealsListView';
 import DashboardHeader from '../components/dashboard/DashboardHeader';
 import DealsChart from '../components/dashboard/DealsChart';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Mic } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/Select';
+import { useToast } from '../hooks/use-toast';
 
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // New: Effect for "Coming Soon" toast
+  useEffect(() => {
+    const hasSeenToast = sessionStorage.getItem('hasSeenFeatureToast');
+    if (!hasSeenToast) {
+        const timer = setTimeout(() => {
+            toast({
+                title: (
+                    <div className="flex items-center">
+                        <Mic className="h-5 w-5 mr-2 text-primary" />
+                        <span>Feature Preview</span>
+                    </div>
+                ),
+                description: "A.I Voice Assist ,Audio Transcription and Analysis features are coming soon!",
+                duration: 5000,
+            });
+            sessionStorage.setItem('hasSeenFeatureToast', 'true');
+        }, 1500);
+
+        return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
 
   useEffect(() => {
     if (!user) return;
@@ -54,7 +79,6 @@ export default function DashboardPage() {
     };
   }, [user]);
 
-  // Combine analyses with their deal names
   const enrichedAnalyses = useMemo(() => {
     return analyses.map(analysis => {
       const deal = deals.find(d => d.id === analysis.dealId);

@@ -1,106 +1,105 @@
-import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/Button';
-import { auth } from '@/firebaseConfig';
-import { useAuth } from '@/hooks/useAuth';
-import { Toaster } from '@/components/ui/Toaster';
-import {
-  LayoutDashboard,
-  LogOut,
-  MessageCircle,
-  Scale,
-} from 'lucide-react';
+import { NavLink, Outlet } from 'react-router-dom';
+import { Button } from './ui/Button';
+import { auth } from '../firebaseConfig';
+import { signOut } from 'firebase/auth';
+import { useAuth } from '../hooks/useAuth';
+import { Toaster } from './ui/Toaster';
+import { LayoutDashboard, Scale, MessageSquare, LogOut, Loader2, ShieldCheck } from 'lucide-react';
+import iconlogo from '../assets/icon.png';
+import { ThemeToggle } from './ThemeToggle';
+import ChatWidget from './chat/ChatWidget'; // Import the Chat Widget
 
-// This type definition is the key to fixing the error.
-// It explicitly tells TypeScript that this component can accept children.
-type AppLayoutProps = {
-  children: React.ReactNode;
-};
-
-const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
-  const { user } = useAuth();
-  const navigate = useNavigate();
+export default function AppLayout() {
+  const { user, isLoading, role } = useAuth();
 
   const handleLogout = async () => {
-    await auth.signOut();
-    navigate('/login');
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out: ", error);
+    }
   };
 
-  return (
-    <div className="flex min-h-screen w-full flex-col bg-muted/40">
-      <aside className="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r bg-background sm:flex">
-        <nav className="flex flex-col items-center gap-4 px-2 sm:py-5">
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) =>
-              `flex h-9 w-9 items-center justify-center rounded-lg ${
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground'
-              } transition-colors hover:text-foreground md:h-8 md:w-8`
-            }
-          >
-            <LayoutDashboard className="h-5 w-5" />
-            <span className="sr-only">Dashboard</span>
-          </NavLink>
-          <NavLink
-            to="/compare"
-            className={({ isActive }) =>
-              `flex h-9 w-9 items-center justify-center rounded-lg ${
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground'
-              } transition-colors hover:text-foreground md:h-8 md:w-8`
-            }
-          >
-            <Scale className="h-5 w-5" />
-            <span className="sr-only">Compare Deals</span>
-          </NavLink>
-          <NavLink
-            to="/chat"
-            className={({ isActive }) =>
-              `flex h-9 w-9 items-center justify-center rounded-lg ${
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground'
-              } transition-colors hover:text-foreground md:h-8 md:w-8`
-            }
-          >
-            <MessageCircle className="h-5 w-5" />
-            <span className="sr-only">Chat Agent</span>
-          </NavLink>
-        </nav>
-        <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground"
-            onClick={handleLogout}
-          >
-            <LogOut className="h-5 w-5" />
-            <span className="sr-only">Logout</span>
-          </Button>
-        </nav>
-      </aside>
-      <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-          <h1 className="text-2xl font-bold tracking-tight text-primary">
-            SealDeal.ai
-          </h1>
-          <div className="ml-auto flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">
-              {user?.email}
-            </span>
-          </div>
-        </header>
-        <main className="flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
-          {children}
-        </main>
-        <Toaster />
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  const navLinks = [
+    { to: '/dashboard', icon: LayoutDashboard, text: 'Dashboard' },
+    { to: '/compare', icon: Scale, text: 'Compare Deals' },
+    { to: '/chat', icon: MessageSquare, text: 'Chat Agent' },
+  ];
+
+  const isAdmin = role === 'admin' || role === 'benchmarking_admin';
+
+  return (
+    <div className="min-h-screen w-full flex bg-background text-foreground">
+      {/* Sidebar */}
+      <aside className="w-64 flex-shrink-0 border-r border-primary/10 flex flex-col p-4">
+        <div className="flex items-center gap-3 px-2 py-4">
+            <img src={iconlogo} alt="SealDeal.ai icon Logo" className="h-12 w-auto" />
+            <span className="text-xl font-bold text-primary">SealDeal.ai</span>
+        </div>
+        <nav className="flex flex-col gap-2 mt-8 flex-grow">
+          {navLinks.map((link) => (
+            <NavLink
+              key={link.to}
+              to={link.to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-secondary ${
+                  isActive ? 'bg-secondary text-primary font-semibold' : 'text-muted-foreground'
+                }`
+              }
+            >
+              <link.icon className="h-5 w-5" />
+              {link.text}
+            </NavLink>
+          ))}
+          {isAdmin && (
+               <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-secondary ${
+                    isActive ? 'bg-secondary text-primary font-semibold' : 'text-muted-foreground'
+                    }`
+                }
+                >
+                <ShieldCheck className="h-5 w-5" />
+                Admin Panel
+                </NavLink>
+          )}
+        </nav>
+         <div className="mt-auto">
+            <Button variant="ghost" onClick={handleLogout} className="w-full justify-start">
+              <LogOut className="mr-2 h-4 w-4" /> Logout
+            </Button>
+         </div>
+      </aside>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        <header className="flex h-16 items-center justify-between border-b border-primary/10 px-6">
+           <div/>
+           <div className="flex items-center gap-4">
+               <ThemeToggle />
+               <div className="text-sm text-right">
+                    <p className="font-semibold">{user?.displayName || user?.email}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{role || 'Analyst'}</p>
+               </div>
+           </div>
+        </header>
+        <main className="flex-1 overflow-y-auto p-6 md:p-8">
+          <Outlet />
+        </main>
+      </div>
+
+      <Toaster />
+      <ChatWidget /> {/* Add the floating widget here */}
     </div>
   );
-};
-
-export default AppLayout;
+}
 

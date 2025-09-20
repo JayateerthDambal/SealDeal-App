@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SealDeal.ai | AI-Powered Deal Analysis for VCs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'brand-dark': '#111827',
+                        'brand-topaz': '#ffb700',
+                        'brand-orange': '#fb923c',
+                        'brand-light': '#f9fafb',
+                        'brand-gray': '#4b5563',
+                    },
+                    animation: {
+                        'fade-in-up': 'fadeInUp 0.8s ease-out forwards',
+                    },
+                    keyframes: {
+                        fadeInUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        .glow {
+            box-shadow: 0 0 20px 0px rgba(251, 146, 60, 0.5);
+        }
+        /* Corrected animation style for better reliability */
+        .animated-section {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+        }
+        .is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="bg-brand-dark text-brand-light">
+
+    <!-- Animated Background -->
+    <canvas id="particle-canvas" class="fixed top-0 left-0 w-full h-full z-0 opacity-20"></canvas>
+
+    <div class="relative z-10">
+        <!-- Header -->
+        <header class="p-4 flex justify-between items-center sticky top-0 bg-brand-dark/80 backdrop-blur-sm z-50">
+            <div class="flex items-center gap-3">
+                <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAEGCAYAAAB0Jm5BAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAAASAAAAEgARslrPgAAIABJREFUeNrsnXtwXFd1/z/3nDP3vY/Jt4yb2E0SU0tK1KQk1WJFSlQkFhVbSlSwY8eO4tiJ43DswLHDzs7OHdsmjq3dsePYdpw4jv0D2YlDx3bs2LJkK7IqrUpKxU2s2EACJEnYwU3cxm/y3vfMvPN8/4yZmW5m596bZKbJ+zw+nslmzpz5zsybN+/5vu+793MeARERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERER-l" alt="SealDeal.ai Logo" class="h-10 w-auto"/>
+                <span class="text-2xl font-bold text-white">SealDeal.ai</span>
+            </div>
+            <!-- CORRECTED HEADER LAYOUT -->
+            <div class="hidden md:flex items-center gap-6">
+                <nav class="flex items-center gap-6 text-sm font-medium">
+                    <a href="#features" class="hover:text-brand-orange transition-colors">Features</a>
+                    <a href="how-to-use.html" class="hover:text-brand-orange transition-colors">How It Works</a>
+                    <a href="#team" class="hover:text-brand-orange transition-colors">Team</a>
+                    <a href="#contact" class="hover:text-brand-orange transition-colors">Contact</a>
+                </nav>
+                <a href="/dashboard" class="px-5 py-2.5 bg-brand-orange text-white font-semibold rounded-lg shadow-lg hover:bg-orange-400 transition-colors glow">Launch App</a>
+            </div>
+             <a href="/dashboard" class="md:hidden px-4 py-2 bg-brand-orange text-white font-semibold rounded-lg shadow-lg hover:bg-orange-400 transition-colors glow">Launch</a>
+        </header>
+
+        <!-- Hero Section -->
+        <main class="px-4">
+            <section class="text-center py-20 md:py-32">
+                <div class="max-w-4xl mx-auto">
+                    <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-brand-topaz to-brand-orange animate-fade-in-up" style="animation-delay: 0.2s;">Seal the Deal, Faster.</h1>
+                    <p class="mt-4 text-lg md:text-xl text-brand-light/80 max-w-2xl mx-auto animate-fade-in-up" style="animation-delay: 0.4s;">
+                        SealDeal.ai is a next-generation investment analytics platform, leveraging advanced AI to automate due diligence, surface critical insights, and empower venture capitalists to make smarter, data-driven decisions in record time.
+                    </p>
+                    <a href="/dashboard" class="mt-8 inline-block px-8 py-4 bg-gradient-to-r from-brand-topaz to-brand-orange text-brand-dark font-bold rounded-xl shadow-2xl hover:scale-105 transition-transform glow animate-fade-in-up" style="animation-delay: 0.6s;">
+                        Get Started & Analyze Your First Deal
+                    </a>
+                </div>
+            </section>
+
+            <!-- Features Section -->
+            <section id="features" class="py-20 max-w-6xl mx-auto animated-section">
+                <h2 class="text-3xl font-bold text-center mb-12">Why SealDeal.ai?</h2>
+                <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                    <!-- Feature Card 1 -->
+                    <div class="bg-white/5 p-6 rounded-xl border border-white/10 hover:-translate-y-2 transition-transform">
+                        <h3 class="font-semibold text-lg text-brand-orange">AI-Powered Due Diligence</h3>
+                        <p class="mt-2 text-sm text-brand-light/70">Upload pitch decks, financials, and more. Our AI extracts key metrics, identifies inconsistencies, and performs a full SWOT analysis automatically.</p>
+                    </div>
+                    <!-- Feature Card 2 -->
+                    <div class="bg-white/5 p-6 rounded-xl border border-white/10 hover:-translate-y-2 transition-transform">
+                        <h3 class="font-semibold text-lg text-brand-orange">Interactive Dashboards</h3>
+                        <p class="mt-2 text-sm text-brand-light/70">Visualize deal performance with dynamic charts and scorecards. Get a portfolio-wide overview or dive deep into a single investment.</p>
+                    </div>
+                    <!-- Feature Card 3 -->
+                    <div class="bg-white/5 p-6 rounded-xl border border-white/10 hover:-translate-y-2 transition-transform">
+                        <h3 class="font-semibold text-lg text-brand-orange">Comparative Analysis</h3>
+                        <p class="mt-2 text-sm text-brand-light/70">Compare multiple deals side-by-side on key metrics. Instantly identify top performers and make informed decisions faster.</p>
+                    </div>
+                     <!-- Feature Card 4 -->
+                    <div class="bg-white/5 p-6 rounded-xl border border-white/10 hover:-translate-y-2 transition-transform">
+                        <h3 class="font-semibold text-lg text-brand-orange">Agent Seal Chat</h3>
+                        <p class="mt-2 text-sm text-brand-light/70">Ask natural language questions about your data. Our conversational AI agent understands your queries and fetches insights on demand.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Team Section -->
+            <section id="team" class="py-20 max-w-6xl mx-auto animated-section">
+                <h2 class="text-3xl font-bold text-center mb-12">Meet the AICommanders</h2>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8">
+                    <!-- Arnold Andrade -->
+                    <div class="text-center">
+                        <a href="https://www.linkedin.com/in/arnold-andrade" target="_blank" rel="noopener noreferrer" class="group">
+                            <img class="w-24 h-24 mx-auto rounded-full object-cover border-2 border-brand-orange group-hover:scale-110 transition-transform" src="https://media.licdn.com/dms/image/v2/D4E03AQFBLNrsD0-ucA/profile-displayphoto-scale_400_400/B4EZiHrBHgGwAo-/0/1754622860269?e=1761177600&v=beta&t=rpAqA40WdFEMLF4X6jxmoILwR_mqyuyE86R4z_Y_Ijo" alt="Arnold Andrade">
+                        </a>
+                        <h4 class="mt-4 font-semibold">Arnold Andrade</h4>
+                        <p class="text-xs text-brand-orange">Team Leader</p>
+                    </div>
+                    <!-- Shakthi Shivani G A -->
+                    <div class="text-center">
+                         <a href="https://www.linkedin.com/in/shakthishivani" target="_blank" rel="noopener noreferrer" class="group">
+                            <img class="w-24 h-24 mx-auto rounded-full object-cover border-2 border-brand-orange group-hover:scale-110 transition-transform" src="https://media.licdn.com/dms/image/v2/D5635AQHO1vwjtU1M9w/profile-framedphoto-shrink_400_400/B56ZiplHPLHMAg-/0/1755191735594?e=1758978000&v=beta&t=IsMlGRsTGHuD7FnSYAt7yHsogcaK6QywoGmEJsaFhQY" alt="Shakthi Shivani G A">
+                        </a>
+                        <h4 class="mt-4 font-semibold">Shakthi Shivani G A</h4>
+                    </div>
+                    <!-- Jayateerth Dambal -->
+                    <div class="text-center">
+                         <a href="https://www.linkedin.com/in/jayateerth-dambal" target="_blank" rel="noopener noreferrer" class="group">
+                            <img class="w-24 h-24 mx-auto rounded-full object-cover border-2 border-brand-orange group-hover:scale-110 transition-transform" src="https://media.licdn.com/dms/image/v2/D4D03AQGI3GlK0KoAVQ/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1715238495081?e=1761177600&v=beta&t=b_KVJwn3ZaACpQ8JHnvxxHFJqc1qv37E3lrQSy_JhOo" alt="Jayateerth Dambal">
+                        </a>
+                        <h4 class="mt-4 font-semibold">Jayateerth Dambal</h4>
+                    </div>
+                    <!-- Madhushree S R -->
+                    <div class="text-center">
+                         <a href="https://www.linkedin.com/in/madhushree-s-r-025353262" target="_blank" rel="noopener noreferrer" class="group">
+                            <img class="w-24 h-24 mx-auto rounded-full object-cover border-2 border-brand-orange group-hover:scale-110 transition-transform" src="https://media.licdn.com/dms/image/v2/D5603AQH1-WefET1nwQ/profile-displayphoto-scale_400_400/B56ZhpINu6G0Ak-/0/1754110421685?e=1761177600&v=beta&t=0hkkRlI1Lz1lcMjWdJktxMZWVfXP62dWqH09lEhAwYA" alt="Madhushree S R">
+                        </a>
+                        <h4 class="mt-4 font-semibold">Madhushree S R</h4>
+                    </div>
+                    <!-- Rachana C K -->
+                    <div class="text-center">
+                         <a href="https://www.linkedin.com/in/rachana-c-k-15141b280" target="_blank" rel="noopener noreferrer" class="group">
+                            <img class="w-24 h-24 mx-auto rounded-full object-cover border-2 border-brand-orange group-hover:scale-110 transition-transform" src="https://media.licdn.com/dms/image/v2/D5603AQEFVBoK327T3g/profile-displayphoto-shrink_400_400/B56Zhmo5d1G4Ag-/0/1754068655913?e=1761177600&v=beta&t=71szFaZIVn8paZ7kqVm_xIE8EsmyqBActUmO3i9mHtE" alt="Rachana C K">
+                        </a>
+                        <h4 class="mt-4 font-semibold">Rachana C K</h4>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Hackathon Section -->
+            <section id="hackathon" class="py-20 text-center animated-section">
+                <div class="max-w-3xl mx-auto bg-white/5 p-8 rounded-xl border border-white/10">
+                    <h2 class="text-2xl font-bold text-brand-orange">#genaiexchangehackathon Submission</h2>
+                    <p class="mt-2 text-brand-light/80">
+                        This project was proudly developed by <strong class="text-white">Team AICommanders</strong> for the Google Cloud GenAI Exchange Hackathon. Our goal was to build a powerful, practical tool that showcases the transformative potential of generative AI in the venture capital industry.
+                    </p>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer / Contact -->
+        <footer id="contact" class="bg-black/50 text-center py-10 mt-16">
+            <p class="font-semibold">Get in touch with Team AICommanders</p>
+            <p class="text-sm text-brand-light/70 mt-1">We'd love to hear your feedback!</p>
+            <div class="mt-4 text-brand-orange">
+                <a href="mailto:shakthishivaniga@gmail.com" class="hover:underline">shakthishivaniga@gmail.com</a>
+            </div>
+            <p class="text-xs text-brand-light/50 mt-8">&copy; 2025 AICommanders. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        // Particle animation script
+        const canvas = document.getElementById('particle-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            let particles = [];
+            const particleCount = 70;
+
+            class Particle {
+                constructor() { this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height; this.size = Math.random() * 2 + 1; this.speedX = Math.random() * 1 - 0.5; this.speedY = Math.random() * 1 - 0.5; this.color = 'rgba(251, 146, 60, 0.8)'; }
+                update() { if (this.x > canvas.width || this.x < 0) this.speedX *= -1; if (this.y > canvas.height || this.y < 0) this.speedY *= -1; this.x += this.speedX; this.y += this.speedY; }
+                draw() { ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); }
+            }
+
+            function init() { for (let i = 0; i < particleCount; i++) { particles.push(new Particle()); } }
+            function animate() { ctx.clearRect(0, 0, canvas.width, canvas.height); for (let i = 0; i < particles.length; i++) { particles[i].update(); particles[i].draw(); } requestAnimationFrame(animate); }
+            init(); animate();
+            window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; particles = []; init(); });
+        }
+
+        // Corrected scroll animation script
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.animated-section').forEach(section => {
+            observer.observe(section);
+        });
+    </script>
+</body>
+</html>
+

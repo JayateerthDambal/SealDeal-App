@@ -49,6 +49,35 @@ const ensureHasRole = async (uid: string, requiredRole: string) => {
     }
 };
 
+// --- ADMIN ONBOARDING FUNCTION (ONE-TIME USE) ---
+export const makeAdmin = onCall({ region: "asia-south1", cors: true }, async (request) => {
+    // Check if the user is authenticated. This is a best practice for admin functions.
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
+    }
+
+    const targetUid = request.data.uid;
+    if (!targetUid) {
+      throw new HttpsError(
+        "invalid-argument",
+        "The function must be called with a 'uid' argument containing the user's ID."
+      );
+    }
+
+    try {
+      await admin.auth().setCustomUserClaims(targetUid, { role: "admin" });
+      const message = `Success! User ${targetUid} has been made an admin.`;
+      console.log(message);
+      return { message };
+    } catch (error) {
+      console.error("Error setting custom claims:", error);
+      throw new HttpsError(
+        "internal",
+        "Failed to set custom claims on the user."
+      );
+    }
+  });
+  
 // --- RBAC & BENCHMARKING FUNCTIONS ---
 
 export const setUserRole = onCall({ region: LOCATION, cors: true }, async (request) => {

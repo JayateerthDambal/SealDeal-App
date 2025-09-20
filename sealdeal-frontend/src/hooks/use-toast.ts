@@ -1,28 +1,50 @@
 import { toast as sonnerToast } from 'sonner';
+import { ReactNode } from 'react';
 
-type ToastVariant = 'default' | 'destructive';
-
-interface ToastOptions {
-  title: string;
-  description: string;
-  variant?: ToastVariant;
+// Define the types for our toast function
+interface ToastProps {
+  title?: ReactNode;
+  description?: ReactNode;
+  variant?: 'default' | 'destructive' | 'success';
+  duration?: number;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 }
 
-const useToast = () => {
-  const toast = ({ title, description, variant = 'default' }: ToastOptions) => {
-    if (variant === 'destructive') {
-      sonnerToast.error(title, {
-        description,
-        // You can add custom styling here if needed
-      });
-    } else {
+// Create a new toast function that maps our props to sonner's API
+const toast = (props: ToastProps) => {
+  const { title, description, variant = 'default', action, ...rest } = props;
+
+  // Map our variants to sonner's functions
+  switch (variant) {
+    case 'success':
       sonnerToast.success(title, {
         description,
+        action,
+        ...rest,
       });
-    }
-  };
-
-  return { toast };
+      break;
+    case 'destructive':
+      sonnerToast.error(title, {
+        description,
+        action,
+        ...rest,
+      });
+      break;
+    default:
+      sonnerToast(title, {
+        description,
+        action,
+        ...rest,
+      });
+      break;
+  }
 };
 
-export { useToast };
+// The custom hook now simply returns our new toast function
+export function useToast() {
+  return { toast };
+}
+

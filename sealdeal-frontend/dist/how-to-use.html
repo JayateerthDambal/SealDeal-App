@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How It Works | SealDeal.ai</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'brand-dark': '#111827',
+                        'brand-topaz': '#ffb700',
+                        'brand-orange': '#fb923c',
+                        'brand-light': '#f9fafb',
+                        'brand-gray': '#4b5563',
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        .glow { box-shadow: 0 0 20px 0px rgba(251, 146, 60, 0.5); }
+        .faq-answer { display: none; }
+        .faq-question.active + .faq-answer { display: block; }
+        .faq-question .icon { transition: transform 0.3s ease; }
+        .faq-question.active .icon { transform: rotate(45deg); }
+    </style>
+</head>
+<body class="bg-brand-dark text-brand-light">
+    <!-- Animated Background -->
+    <canvas id="particle-canvas" class="fixed top-0 left-0 w-full h-full z-0 opacity-20"></canvas>
+
+    <div class="relative z-10">
+        <!-- Header -->
+        <header class="p-4 flex justify-between items-center sticky top-0 bg-brand-dark/80 backdrop-blur-sm z-50">
+            <a href="/landing.html" class="flex items-center gap-3">
+                <img src="/assets/logo.png" alt="SealDeal.ai Logo" class="h-10 w-auto"/>
+                <span class="text-2xl font-bold text-white">SealDeal.ai</span>
+            </a>
+            <a href="/" class="px-5 py-2.5 bg-brand-orange text-white font-semibold rounded-lg shadow-lg hover:bg-orange-400 transition-colors glow">Launch App</a>
+        </header>
+
+        <main class="px-4 max-w-5xl mx-auto py-16">
+            <!-- Hero Section -->
+            <section class="text-center mb-24">
+                <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-brand-topaz to-brand-orange">User Guide & FAQ</h1>
+                <p class="mt-4 text-lg text-brand-light/80 max-w-2xl mx-auto">
+                    Your step-by-step guide to leveraging the full power of SealDeal.ai for your investment analysis.
+                </p>
+            </section>
+
+            <!-- Detailed Steps Section -->
+            <section class="space-y-16">
+                <!-- Step 1: Create a Deal -->
+                <div class="grid md:grid-cols-2 gap-8 items-center">
+                    <div>
+                        <span class="text-sm font-bold text-brand-orange">STEP 01</span>
+                        <h2 class="text-3xl font-bold mt-2">Create a New Deal</h2>
+                        <p class="mt-4 text-brand-light/70">From the main dashboard, click the "New Deal" button. Give your deal a unique name to create a dedicated workspace. This is where all your documents and analysis for that specific investment will live.</p>
+                    </div>
+                    <div class="bg-white/5 p-2 rounded-xl border border-white/10 group overflow-hidden">
+                        <img src="/dashboardsc.png" alt="Screenshot of the Dashboard with New Deal button" class="rounded-lg w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    </div>
+                </div>
+
+                <!-- Step 2: Upload Documents -->
+                <div class="grid md:grid-cols-2 gap-8 items-center">
+                     <div class="bg-white/5 p-2 rounded-xl border border-white/10 md:order-last group overflow-hidden">
+                       <img src="/uploadsc.png" alt="Screenshot of the Document Manager" class="rounded-lg w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    </div>
+                    <div>
+                        <span class="text-sm font-bold text-brand-orange">STEP 02</span>
+                        <h2 class="text-3xl font-bold mt-2">Upload Your Documents</h2>
+                        <p class="mt-4 text-brand-light/70">Inside your new deal workspace, you'll find the Document Manager. Drag and drop all relevant files—pitch decks (.pdf, .pptx), financials (.xlsx, .csv), and text documents—into the upload zone. You can upload multiple files at once.</p>
+                    </div>
+                </div>
+
+                <!-- Step 3: Run Analysis -->
+                <div class="grid md:grid-cols-2 gap-8 items-center">
+                    <div>
+                        <span class="text-sm font-bold text-brand-orange">STEP 03</span>
+                        <h2 class="text-3xl font-bold mt-2">Initiate the AI Analysis</h2>
+                        <p class="mt-4 text-brand-light/70">Once your documents are uploaded, click the "Run Comprehensive Analysis" button. Our AI will begin processing all the information, cross-referencing data, and preparing your detailed report. The deal status will update to "Processing".</p>
+                    </div>
+                    <div class="bg-white/5 p-2 rounded-xl border border-white/10 group overflow-hidden">
+                         <img src="/analysesc.png" alt="Screenshot of the Analysis Results page" class="rounded-lg w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    </div>
+                </div>
+                
+                 <!-- Step 4: Share & Export -->
+                <div class="grid md:grid-cols-2 gap-8 items-center">
+                     <div class="bg-white/5 p-2 rounded-xl border border-white/10 md:order-last group overflow-hidden">
+                       <img src="/exportsc.png" alt="Screenshot of the custom report and email modal" class="rounded-lg w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    </div>
+                    <div>
+                        <span class="text-sm font-bold text-brand-orange">STEP 04</span>
+                        <h2 class="text-3xl font-bold mt-2">Share & Export Insights</h2>
+                        <p class="mt-4 text-brand-light/70">When the analysis is complete, share your findings with stakeholders. You can export a beautifully formatted, multi-page PDF report or send a custom report with only the sections you select directly via email.</p>
+                    </div>
+                </div>
+
+                <!-- Step 5: Chat with Agent Seal -->
+                <div class="grid md:grid-cols-2 gap-8 items-center">
+                    <div>
+                        <span class="text-sm font-bold text-brand-orange">STEP 05</span>
+                        <h2 class="text-3xl font-bold mt-2">Query Your Data Instantly</h2>
+                        <p class="mt-4 text-brand-light/70">Need a specific data point? Use the floating Agent Seal widget. Ask natural language questions like "What is the LTV/CAC ratio for Test 8?" and get immediate answers, complete with the underlying SQL query for full transparency.</p>
+                    </div>
+                    <div class="bg-white/5 p-2 rounded-xl border border-white/10 group overflow-hidden">
+                         <img src="sealagentsc.png" alt="Screenshot of the Agent Seal chat widget" class="rounded-lg w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    </div>
+                </div>
+            </section>
+            
+            <!-- FAQ Section -->
+            <section id="faq" class="py-24">
+                <h2 class="text-3xl font-bold text-center mb-12">Frequently Asked Questions</h2>
+                <div class="max-w-3xl mx-auto space-y-4">
+                    <!-- FAQ Item 1 -->
+                    <div class="bg-white/5 border border-white/10 rounded-lg">
+                        <button class="faq-question flex justify-between items-center w-full p-6 text-left">
+                            <span class="font-semibold">What file types are supported?</span>
+                            <span class="icon transform transition-transform duration-300">+</span>
+                        </button>
+                        <div class="faq-answer px-6 pb-6 text-brand-light/70">
+                            <p>SealDeal.ai currently supports PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx), CSV (.csv), and plain text (.txt) files. You can upload multiple files of different types for a single analysis.</p>
+                        </div>
+                    </div>
+                    <!-- FAQ Item 2 -->
+                    <div class="bg-white/5 border border-white/10 rounded-lg">
+                         <button class="faq-question flex justify-between items-center w-full p-6 text-left">
+                            <span class="font-semibold">How is my data kept secure?</span>
+                            <span class="icon transform transition-transform duration-300">+</span>
+                        </button>
+                        <div class="faq-answer px-6 pb-6 text-brand-light/70">
+                            <p>We take data security seriously. Your files are uploaded to a private, secure Google Cloud Storage bucket associated only with your account. All analysis is performed within a secure cloud environment, and we leverage Firebase's robust security rules to ensure only you can access your data.</p>
+                        </div>
+                    </div>
+                    <!-- FAQ Item 3 -->
+                    <div class="bg-white/5 border border-white/10 rounded-lg">
+                         <button class="faq-question flex justify-between items-center w-full p-6 text-left">
+                            <span class="font-semibold">How does the AI handle conflicting information?</span>
+                            <span class="icon transform transition-transform duration-300">+</span>
+                        </button>
+                        <div class="faq-answer px-6 pb-6 text-brand-light/70">
+                            <p>Our AI is specifically prompted to cross-reference information across all provided documents. If it finds inconsistencies (e.g., a different LTV in the pitch deck vs. the financial model), it will flag this as a "Key Risk Area" in the final analysis report for your review.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-black/50 text-center py-10 mt-16">
+            <p class="text-xs text-brand-light/50">&copy; 2025 AICommanders. All rights reserved.</p>
+        </footer>
+    </div>
+    
+    <script>
+        // Particle animation script
+        const canvas = document.getElementById('particle-canvas');
+        if(canvas) {
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            let particles = [];
+            const particleCount = 70;
+            class Particle {
+                constructor(){this.x=Math.random()*canvas.width;this.y=Math.random()*canvas.height;this.size=Math.random()*2+1;this.speedX=Math.random()*1-0.5;this.speedY=Math.random()*1-0.5;this.color="rgba(251, 146, 60, 0.8)"}
+                update(){(this.x>canvas.width||this.x<0)&&(this.speedX*=-1);(this.y>canvas.height||this.y<0)&&(this.speedY*=-1);this.x+=this.speedX;this.y+=this.speedY}
+                draw(){ctx.fillStyle=this.color;ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fill()}
+            }
+            function init(){for(let o=0;o<particleCount;o++)particles.push(new Particle)}
+            function animate(){ctx.clearRect(0,0,canvas.width,canvas.height);for(let o=0;o<particles.length;o++)particles[o].update(),particles[o].draw();requestAnimationFrame(animate)}
+            init();
+            animate();
+            window.addEventListener("resize",()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;particles=[];init()});
+        }
+
+        // FAQ Accordion script
+        document.querySelectorAll('.faq-question').forEach(button => {
+            button.addEventListener('click', () => {
+                button.classList.toggle('active');
+            });
+        });
+    </script>
+</body>
+</html>
+
