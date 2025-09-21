@@ -35,6 +35,9 @@ if (process.env.FUNCTIONS_EMULATOR === "true") {
     db.settings({ host: "localhost:8080", ssl: false });
 }
 
+const vertex_ai = new VertexAI({ project: PROJECT_ID, location: LOCATION });
+const generativeModel = vertex_ai.getGenerativeModel({ model: "gemini-1.5-flash-002" });
+
 // --- RBAC HELPER ---
 /**
  * Checks if the calling user has the required role or is a general admin.
@@ -391,8 +394,8 @@ agentApp.use(cors({ origin: true }));
 agentApp.use(bodyParser.json());
 
 
-const vertex_ai = new VertexAI({ project: PROJECT_ID, location: "asia-south1" });
-const generativeModel = vertex_ai.getGenerativeModel({ model: "gemini-1.5-flash-002" });
+//const vertex_ai = new VertexAI({ project: PROJECT_ID, location: "asia-south1" });
+//const generativeModel = vertex_ai.getGenerativeModel({ model: "gemini-1.5-flash-002" });
 
 
 // --- UPDATED HELPER FUNCTIONS FOR RESPONSE FORMATTING ---
