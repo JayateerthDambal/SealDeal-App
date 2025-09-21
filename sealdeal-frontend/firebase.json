@@ -48,6 +48,9 @@
       "enabled": true,
       "port": 4000
     }
+  },
+  "extensions": {
+    "firestore-bigquery-export": "firebase/firestore-bigquery-export@0.2.6"
   }
 }
 

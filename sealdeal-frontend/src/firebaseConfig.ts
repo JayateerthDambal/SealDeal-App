@@ -6,12 +6,12 @@ import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
 // TODO: Later turn this to .env
 const firebaseConfig = {
-  apiKey: "AIzaSyBP0MYTBNJXgQaDenApYczx_TbaQr41k4E",
-  authDomain: "sunlit-setup-470516-q3.firebaseapp.com",
-  projectId: "sunlit-setup-470516-q3",
-  storageBucket: "sunlit-setup-470516-q3.firebasestorage.app",
-  messagingSenderId: "318231552684",
-  appId: "1:318231552684:web:4042d38684c859e5313509"
+  apiKey: "AIzaSyBgVprZ-f_IMuULto8upD7TBdWUwdWKlQc",
+  authDomain: "genai-hackathon-aicommanders.firebaseapp.com",
+  projectId: "genai-hackathon-aicommanders",
+  storageBucket: "genai-hackathon-aicommanders.firebasestorage.app",
+  messagingSenderId: "911058000673",
+  appId: "1:911058000673:web:51550be8136446bc3bfc60"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -24,6 +24,8 @@ export const db = getFirestore(app);
 export const functions = getFunctions(app, 'asia-south1');
 
 // Connect to emulators if running locally (in development)
+// Comment out the emulator connections to use deployed functions instead
+/*
 if (window.location.hostname === "localhost") {
   console.log("Development mode: Connecting to local Firebase emulators.");
   connectAuthEmulator(auth, "http://localhost:9099");
@@ -31,6 +33,7 @@ if (window.location.hostname === "localhost") {
   connectFirestoreEmulator(db, "localhost", 8080);
   connectFunctionsEmulator(functions, "localhost", 5001);
 }
+*/
 
 // Export the app instance itself to fix the error
 export { app };

@@ -23,7 +23,7 @@ const bigquery = new BigQuery();
 
 
 // --- CONFIGURATION ---
-const PROJECT_ID = "sunlit-setup-470516-q3";
+const PROJECT_ID = "genai-hackathon-aicommanders";
 const LOCATION = "asia-south1";
 const BIGQUERY_DATASET = "deal_analysis";
 const BIGQUERY_TABLE = "analyses";
@@ -74,7 +74,7 @@ export const addBenchmarkData = onCall({ region: LOCATION, cors: true }, async (
     if (!request.auth) { throw new HttpsError("unauthenticated", "You must be logged in."); }
     // Check if user is an admin or a benchmarking_admin
     await ensureHasRole(request.auth.uid, "benchmarking_admin");
-    
+
     const { industry, stage, arr } = request.data;
     if (!industry || !stage || arr === undefined) {
         throw new HttpsError("invalid-argument", "Industry, stage, and ARR are required.");
@@ -174,7 +174,7 @@ async function runAnalysisLogic(dealId: string, uid: string) {
 
             if (fileName.endsWith(".pdf")) { return { type: "presentation", data: fileBuffer.toString("base64"), fileName, mimeType: "application/pdf" }; }
             if (fileName.endsWith(".pptx")) { return { type: "presentation", data: fileBuffer.toString("base64"), fileName, mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }; }
-           
+
             let content = "";
             if (fileName.endsWith(".csv")) { content = parse(fileBuffer).join("\n"); }
             else if (fileName.endsWith(".xlsx")) {
@@ -267,10 +267,10 @@ async function runAnalysisLogic(dealId: string, uid: string) {
               }
             }
         `;
-       
+
         const allParts: ({ text: string } | { inline_data: { mime_type: string; data: string } })[] = [{ text: prompt }, ...presentationParts];
         if (textContent.trim().length > 0) allParts.push({ text: textContent });
-       
+
         const requestBody = { contents: [{ role: "user", parts: allParts }] };
         const model = "gemini-1.5-flash-002";
         const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${model}:generateContent`;
@@ -328,7 +328,7 @@ async function runAnalysisLogic(dealId: string, uid: string) {
 
         await bigquery.dataset(BIGQUERY_DATASET).table(BIGQUERY_TABLE).insert([bqRow]);
         logger.info(`Analysis for deal ${dealId} successfully exported to BigQuery.`);
-       
+
         await db.collection("deals").doc(dealId).update({ status: "4_Analyzed" });
         return { success: true, message: "Analysis completed successfully." };
     } catch (error) {
@@ -402,6 +402,12 @@ function formatBigQueryResults(rows: Record<string, unknown>[]): string {
     if (rows.length === 1 && Object.keys(rows[0]).length === 1) {
         const key = Object.keys(rows[0])[0];
         const value = rows[0][key];
+        
+        // Handle count queries specifically
+        if (key.includes("count") || key.startsWith("f0_")) {
+            return `There are ${value} deals analyzed in the database.`;
+        }
+        
         const formattedValue = formatValue(key, value);
         const formattedKey = formatHeader(key);
         return `The ${formattedKey} is ${formattedValue}.`;
@@ -454,11 +460,11 @@ agentApp.post("/chat", async (req, res) => {
         let formattedResults = "";
         // eslint-disable-next-line prefer-const
         let sqlQuery = "N/A";
-       
+
         if (intent === "data_query") {
             // --- ENHANCED PROMPT WITH MORE DETAIL AND GUARDRAILS ---
             const schema = `
-          Table 1: \`sunlit-setup-470516-q3.deal_analysis.analyses\` (This table contains the user's private, analyzed deals).
+          Table 1: \`genai-hackathon-aicommanders.deal_analysis.analyses\` (This table contains the user's private, analyzed deals).
           Key Columns & Common Synonyms:
           - dealName: STRING (The display name of the deal. Synonyms: "deal name", "company name")
           - metrics_arr_value: FLOAT (Annual Recurring Revenue in USD. Synonyms: "ARR", "annual revenue")
@@ -470,7 +476,7 @@ agentApp.post("/chat", async (req, res) => {
           - risk_flags: STRING (REPEATED. Synonyms: "risks", "flags", "red flags")
 
 
-          Table 2: \`sunlit-setup-470516-q3.genhackathon.InvestmentVC\` (This table contains public, historical data about VC investments for benchmarking).
+          Table 2: \`genai-hackathon-aicommanders.genhackathon.InvestmentVC\` (This table contains public, historical data about VC investments for benchmarking).
           Key Columns & Common Synonyms:
           - name: STRING (The official company name. Synonyms: "company", "organization")
           - market: STRING (The industry market, e.g., 'Hospitality', 'Education'. Synonyms: "industry", "sector")
@@ -491,17 +497,17 @@ agentApp.post("/chat", async (req, res) => {
 
             Example 1 (Querying User's Deals with Synonym and Case-Insensitivity):
             Question: "What is the LTV for test 1?"
-            SQL: SELECT metrics_ltv_value FROM \`sunlit-setup-470516-q3.deal_analysis.analyses\` WHERE LOWER(dealName) = 'test 1'
+            SQL: SELECT metrics_ltv_value FROM \`genai-hackathon-aicommanders.deal_analysis.analyses\` WHERE LOWER(dealName) = 'test 1'
 
 
             Example 2 (Querying Public Data):
             Question: "list the top 5 companies in the Hospitality sector by total funding"
-            SQL: SELECT name, funding_total_usd FROM \`sunlit-setup-470516-q3.genhackathon.InvestmentVC\` WHERE market = 'Hospitality' ORDER BY funding_total_usd DESC LIMIT 5
+            SQL: SELECT name, funding_total_usd FROM \`genai-hackathon-aicommanders.genhackathon.InvestmentVC\` WHERE market = 'Hospitality' ORDER BY funding_total_usd DESC LIMIT 5
 
 
             Example 3 (Complex Join):
             Question: "compare the total funding of Test 1 with the average funding in its market"
-            SQL: WITH DealMarket AS (SELECT T2.market FROM \`sunlit-setup-470516-q3.deal_analysis.analyses\` AS T1 JOIN \`sunlit-setup-470516-q3.genhackathon.InvestmentVC\` AS T2 ON T1.dealName = T2.name WHERE T1.dealName = 'Test 1') SELECT t1.dealName, t2.funding_total_usd, (SELECT AVG(funding_total_usd) FROM \`sunlit-setup-470516-q3.genhackathon.InvestmentVC\` WHERE market = (SELECT market FROM DealMarket)) as average_market_funding FROM \`sunlit-setup-470516-q3.deal_analysis.analyses\` AS t1 JOIN \`sunlit-setup-470516-q3.genhackathon.InvestmentVC\` AS t2 ON t1.dealName = t2.name WHERE t1.dealName = 'Test 1'
+            SQL: WITH DealMarket AS (SELECT T2.market FROM \`genai-hackathon-aicommanders.deal_analysis.analyses\` AS T1 JOIN \`genai-hackathon-aicommanders.genhackathon.InvestmentVC\` AS T2 ON T1.dealName = T2.name WHERE T1.dealName = 'Test 1') SELECT t1.dealName, t2.funding_total_usd, (SELECT AVG(funding_total_usd) FROM \`genai-hackathon-aicommanders.genhackathon.InvestmentVC\` WHERE market = (SELECT market FROM DealMarket)) as average_market_funding FROM \`genai-hackathon-aicommanders.deal_analysis.analyses\` AS t1 JOIN \`genai-hackathon-aicommanders.genhackathon.InvestmentVC\` AS t2 ON t1.dealName = t2.name WHERE t1.dealName = 'Test 1'
 
 
             ---
@@ -509,68 +515,68 @@ agentApp.post("/chat", async (req, res) => {
             Question: "${message}"
             SQL:
         `;
-        // --- RETRY LOGIC STARTS HERE ---
-        let llmResp: GenerateContentResult | undefined;
-        const maxRetries = 3;
-        let attempt = 0;
-        let lastError: Error | null = null;
+            // --- RETRY LOGIC STARTS HERE ---
+            let llmResp: GenerateContentResult | undefined;
+            const maxRetries = 3;
+            let attempt = 0;
+            let lastError: Error | null = null;
 
 
-        while (attempt < maxRetries) {
-            try {
-                llmResp = await generativeModel.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }] });
-                break; // Success, exit loop
-            } catch (err: unknown) {
-                lastError = err as Error;
-                // Specifically check for 429 Resource Exhausted error
-                if (lastError.message.includes("429")) {
-                    attempt++;
-                    if (attempt < maxRetries) {
-                        const delayTime = Math.pow(2, attempt) * 1000; // 2s, 4s
-                        logger.warn(`Rate limit hit. Retrying in ${delayTime / 1000}s...`);
-                        await delay(delayTime);
+            while (attempt < maxRetries) {
+                try {
+                    llmResp = await generativeModel.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }] });
+                    break; // Success, exit loop
+                } catch (err: unknown) {
+                    lastError = err as Error;
+                    // Specifically check for 429 Resource Exhausted error
+                    if (lastError.message.includes("429")) {
+                        attempt++;
+                        if (attempt < maxRetries) {
+                            const delayTime = Math.pow(2, attempt) * 1000; // 2s, 4s
+                            logger.warn(`Rate limit hit. Retrying in ${delayTime / 1000}s...`);
+                            await delay(delayTime);
+                        }
+                    } else {
+                        // It's a different kind of error, don't retry
+                        throw lastError;
                     }
-                } else {
-                    // It's a different kind of error, don't retry
-                    throw lastError;
                 }
             }
-        }
 
 
-        if (!llmResp) {
-            logger.error("Failed to get response from Vertex AI after multiple retries.", { lastError });
-            throw new HttpsError("unavailable", "The AI service is currently overloaded. Please try again later.");
-        }
-        // --- RETRY LOGIC ENDS HERE ---
-       
-        const sqlQuery = llmResp.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim().replace(/```sql|```/g, "") || "";
+            if (!llmResp) {
+                logger.error("Failed to get response from Vertex AI after multiple retries.", { lastError });
+                throw new HttpsError("unavailable", "The AI service is currently overloaded. Please try again later.");
+            }
+            // --- RETRY LOGIC ENDS HERE ---
+
+            const sqlQuery = llmResp.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim().replace(/```sql|```/g, "") || "";
 
 
-        if (!sqlQuery) {
-            throw new Error("Could not generate a valid SQL query.");
-        }
-       
-        const [rows] = await bigquery.query({ query: sqlQuery });
-        const formattedResults = formatBigQueryResults(rows);
+            if (!sqlQuery) {
+                throw new Error("Could not generate a valid SQL query.");
+            }
+
+            const [rows] = await bigquery.query({ query: sqlQuery });
+            const formattedResults = formatBigQueryResults(rows);
 
 
-        await sessionRef.collection("messages").add({
-            role: "assistant",
-            sql: sqlQuery,
-            result: formattedResults,
-            timestamp: FieldValue.serverTimestamp(),
-        });
+            await sessionRef.collection("messages").add({
+                role: "assistant",
+                sql: sqlQuery,
+                result: formattedResults,
+                timestamp: FieldValue.serverTimestamp(),
+            });
 
 
-        return res.json({
-            sql: sqlQuery,
-            result: rows,
-            formatted: formattedResults,
-        });
+            return res.json({
+                sql: sqlQuery,
+                result: rows,
+                formatted: formattedResults,
+            });
 
 
-    }else {
+        } else {
             // --- Logic for Web-Grounded Insights ---
             const insightsPrompt = `
                 Act as an expert investment analyst. The user is asking for market insights or explanations.
@@ -579,7 +585,7 @@ agentApp.post("/chat", async (req, res) => {
                 Format your response using Markdown.
                 Question: "${message}"
             `;
-           
+
             const groundedResult = await generativeModel.generateContent({
                 contents: [{ role: "user", parts: [{ text: insightsPrompt }] }],
                 tools: [{ "googleSearchRetrieval": {} }] // Enable Google Search grounding
@@ -598,8 +604,8 @@ agentApp.post("/chat", async (req, res) => {
 
         return res.json({ sql: sqlQuery, formatted: formattedResults });
     }
-       
-        catch (err: unknown) {
+
+    catch (err: unknown) {
         const error = err as Error;
         logger.error("Chat Agent Error:", error.message, { originalError: err });
         // Return a more specific error if it's the one we handled
@@ -614,4 +620,7 @@ agentApp.post("/chat", async (req, res) => {
 // CORRECTED: Export the Express app by wrapping it in onRequest.
 // This creates a single, regionally-aware HTTP endpoint for the agent.
 export const chatAgent = onRequest({ region: "asia-south1" }, agentApp);
+
+// Export enhanced chat agent with RAG and Agent Builder
+export { enhancedChatAgent } from "./enhanced-chat-agent.js";
 

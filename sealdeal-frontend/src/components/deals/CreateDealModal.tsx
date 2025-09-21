@@ -28,7 +28,7 @@ export default function CreateDealModal({ isOpen, onClose }: CreateDealModalProp
 
     setIsLoading(true);
     try {
-      const result = await createDeal(dealName);
+      const result = await createDeal({ dealName });
       toast({
         title: "Success!",
         description: `Deal "${dealName}" has been created.`,

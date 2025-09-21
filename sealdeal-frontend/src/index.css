@@ -4,24 +4,24 @@
 
 @layer base {
   :root {
-    /* Color Theme: Glossy Topaz & Black */
-    --background: 240 10% 3.9%; /* Rich Black */
-    --foreground: 0 0% 98%; /* Light Cream/White */
+    /* Light Mode - Professional & Clean */
+    --background: 0 0% 100%; /* Pure White */
+    --foreground: 240 10% 3.9%; /* Dark Text */
 
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
 
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
 
     --primary: 33 94% 53%; /* Glossy Topaz/Amber - #D58C2A */
-    --primary-foreground: 240 10% 3.9%;
+    --primary-foreground: 0 0% 98%;
 
-    --secondary: 240 4.8% 95.9%;
+    --secondary: 240 4.8% 95.9%; /* Light Gray */
     --secondary-foreground: 240 5.9% 10%;
 
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
+    --muted: 240 4.8% 95.9%; /* Light background for cards */
+    --muted-foreground: 240 3.8% 46.1%;
 
     --accent: 33 84% 63%; /* Lighter Topaz for hover effects */
     --accent-foreground: 240 5.9% 10%;
@@ -29,17 +29,25 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
+    --border: 240 5.9% 90%; /* Light border */
+    --input: 240 5.9% 90%;
     --ring: 33 94% 53%;
 
     --radius: 0.75rem;
+
+    /* Stakeholder-focused colors */
+    --success: 142 76% 36%;
+    --success-foreground: 355 7% 97%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 48 96% 89%;
+    --info: 221 83% 53%;
+    --info-foreground: 210 40% 98%;
   }
 
   .dark {
-    /* Keeping the dark theme consistent with the primary theme */
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
+    /* Dark Mode - Premium & Professional */
+    --background: 240 10% 3.9%; /* Rich Black */
+    --foreground: 0 0% 98%; /* Light Cream/White */
 
     --card: 240 10% 3.9%;
     --card-foreground: 0 0% 98%;
@@ -65,6 +73,14 @@
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
     --ring: 33 84% 63%;
+
+    /* Stakeholder-focused colors */
+    --success: 142 71% 45%;
+    --success-foreground: 144 61% 20%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 48 96% 89%;
+    --info: 217 91% 60%;
+    --info-foreground: 222 47% 11%;
   }
 }
 
